@@ -3,7 +3,7 @@ import os
 import json
 import logging
 import requests
-from dotenv import load_dotenv
+from infisical_client import InfisicalClient, ClientSettings, GetSecretOptions
 
 # ─── Setup logging ───────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -12,25 +12,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ─── Locate and load .env ────────────────────────────────────────────────────
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(SCRIPT_DIR, '.env')
+# ─── Initialize Infisical client ────────────────────────────────────────────
+settings = ClientSettings(
+    access_token="st.0bb5c3fd-9c7a-4d4a-ba21-cf52f19fe138.82a484eeef259b2d7b86981beb097f3e.2f6edc5753315a2785e9857975b30c76",
+    site_url="http://192.168.1.14:80"  # your Infisical instance
+)
+client = InfisicalClient(settings)
 
-if not os.path.exists(ENV_PATH):
-    raise FileNotFoundError(f".env file not found at {ENV_PATH}")
-
-load_dotenv(ENV_PATH)
-
-print(f"ENV file path: {ENV_PATH}")
-print("Contents of .env file:")
-with open(ENV_PATH, 'r') as f:
-    for line in f:
-        if "=" in line:
-            key, value = line.strip().split("=", 1)
-            if "PASSWORD" in key or "TOKEN" in key:
-                print(f"{key}=********")
-            else:
-                print(f"{key}={value}")
+# Get secrets from Infisical
+try:
+    # Get each secret individually using the new SDK methods
+    email_options = GetSecretOptions(
+        environment="prod",
+        project_id="Y",  # Your project ID
+        secret_name="FASTMAIL_EMAIL"
+    )
+    token_options = GetSecretOptions(
+        environment="prod", 
+        project_id="Y",  # Your project ID
+        secret_name="FASTMAIL_API_TOKEN"
+    )
+    
+    email_secret = client.getSecret(email_options)
+    token_secret = client.getSecret(token_options)
+    
+    FASTMAIL_EMAIL = email_secret.secret_value
+    FASTMAIL_API_TOKEN = token_secret.secret_value
+    
+    print(f"Email: {FASTMAIL_EMAIL}")
+    print(f"API Token: {'*'*len(FASTMAIL_API_TOKEN) if FASTMAIL_API_TOKEN else None}")
+except Exception as e:
+    print(f"Error getting secrets from Infisical: {e}")
+    print("Please make sure:")
+    print("1. Your Infisical server is running at http://192.168.1.14:80")
+    print("2. You have replaced 'YOUR_PERSONAL_ACCESS_TOKEN' with your actual token")
+    print("3. The secrets FASTMAIL_EMAIL and FASTMAIL_API_TOKEN exist in the 'prod' environment")
+    print("4. The project ID 'Y' is correct")
+    exit(1)
 
 class FastMailAliasManager:
     def __init__(self, email: str, api_token: str):
@@ -40,7 +58,7 @@ class FastMailAliasManager:
         self.account_id = None        # JMAP mail account ID
         self.session_state = None
 
-        # Standard headers; we’ll fill in Authorization below
+        # Standard headers; we'll fill in Authorization below
         self.headers = {
             "Content-Type": "application/json",
             "Accept":       "application/json",
@@ -61,7 +79,7 @@ class FastMailAliasManager:
         3) POST a Core/echo to fetch sessionState
         """
         try:
-            # ─── STEP 1: Discover JMAP endpoint via “.well‐known/jmap” ─────────────
+            # ─── STEP 1: Discover JMAP endpoint via ".well-known/jmap" ─────────────
             session_url = "https://api.fastmail.com/.well-known/jmap"
             print("Step 1: GET /.well-known/jmap (Bearer token)")
             resp = self.session.get(session_url, headers=self.headers)
@@ -184,8 +202,8 @@ class FastMailAliasManager:
                 "oldState":"(old sessionState)",
                 "newState":"(updated sessionState)",
                 "created": {
-                  "<some‐UUID>": {
-                    "id":"<some‐UUID>",
+                  "<some-UUID>": {
+                    "id":"<some-UUID>",
                     "name":"test00",
                     "email":"test00@fastmail.com",
                     …other fields…
@@ -282,7 +300,7 @@ class FastMailAliasManager:
                 "oldState":"(old sessionState)",
                 "newState":"(updated sessionState)",
                 "created": { … },
-                "destroyed":[ "<the‐id‐we‐just‐destroyed>" ]
+                "destroyed":[ "<the-id-we-just-destroyed>" ]
               },
               "0"
             ]
@@ -335,29 +353,22 @@ class FastMailAliasManager:
 
 
 def main():
-    # ─── Load environment variables ───────────────────────────────────────────
-    email        = os.getenv("FASTMAIL_EMAIL")
-    api_token    = os.getenv("FASTMAIL_API_TOKEN")
-    # We still load FASTMAIL_PASSWORD & FASTMAIL_APP_PASSWORD for backward compatibility,
-    # but they are not used in this “Bearer‐token” flow.
-    password     = os.getenv("FASTMAIL_PASSWORD")
-    app_password = os.getenv("FASTMAIL_APP_PASSWORD")
+    # Use secrets from Infisical
+    email = FASTMAIL_EMAIL
+    api_token = FASTMAIL_API_TOKEN
 
-    print(f"ENV file path: {ENV_PATH}")
     print(f"Email: {email}")
-    print(f"Password: {'*'*len(password) if password else None}")
-    print(f"App Password: {'*'*len(app_password) if app_password else None}")
     print(f"API Token: {'*'*len(api_token) if api_token else None}")
 
     if not all([email, api_token]):
-        print("Please set both FASTMAIL_EMAIL and FASTMAIL_API_TOKEN in your .env, then rerun.")
+        print("Please set both FASTMAIL_EMAIL and FASTMAIL_API_TOKEN in Infisical, then rerun.")
         return
 
     manager = FastMailAliasManager(email, api_token)
     if manager.login():
         print("Login successful!\n")
 
-        # ─── Create a new alias “test001” ───────────────────────────────────
+        # ─── Create a new alias "test001" ───────────────────────────────────
         new_alias = manager.create_alias("test001")
         if new_alias:
             print(f"✓ Created new alias: {new_alias['email']} (ID: {new_alias['id']})\n")
