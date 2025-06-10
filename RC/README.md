@@ -48,3 +48,7 @@ The script will:
 - By default, the browser runs in visible mode. To run in headless mode, uncomment the headless option in the script
 - The script includes proper wait conditions to handle dynamic loading of elements
 - All actions are logged for debugging purposes 
+
+## Usage
+
+python3 rc_a.py -a 1 2 -p "Project1" "Project2" -x c_p
