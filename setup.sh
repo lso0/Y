@@ -54,10 +54,8 @@ read -p "Service Token: " SERVICE_TOKEN
 
 # Export secrets to .env file in root directory
 echo "Fetching secrets from Infisical..."
-if ! INFISICAL_TOKEN="$SERVICE_TOKEN" infisical export --env=prod --format=dotenv > .env; then
-    echo "Error: Failed to export secrets. Please check your service token and try again."
-    exit 1
-fi
+infisical export --env=prod --format=dotenv > .env
+wait
 
 # Also copy to RC directory for local development
 cp .env RC/.env
