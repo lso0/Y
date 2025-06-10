@@ -19,13 +19,43 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
+# Function to check if user is logged in
+check_infisical_login() {
+    if ! infisical whoami &> /dev/null; then
+        return 1
+    fi
+    return 0
+}
+
 # Authenticate with Infisical
-echo "Please authenticate with Infisical..."
-infisical login
+echo "Checking Infisical authentication..."
+if ! check_infisical_login; then
+    echo "Please authenticate with Infisical..."
+    infisical login
+    
+    # Verify login was successful
+    if ! check_infisical_login; then
+        echo "Error: Infisical authentication failed. Please try again."
+        exit 1
+    fi
+fi
+
+# Ask for service token
+echo "Please enter your Infisical service token (you can get this from https://app.infisical.com/dashboard > Project Settings > Service Tokens):"
+read -p "Service Token: " SERVICE_TOKEN
+
+# Validate service token
+if [ -z "$SERVICE_TOKEN" ]; then
+    echo "Error: Service token cannot be empty"
+    exit 1
+fi
 
 # Export secrets to .env file in root directory
 echo "Fetching secrets from Infisical..."
-infisical export --env=prod --format=dotenv > .env
+if ! INFISICAL_TOKEN="$SERVICE_TOKEN" infisical export --env=prod --format=dotenv > .env; then
+    echo "Error: Failed to export secrets. Please check your service token and try again."
+    exit 1
+fi
 
 # Also copy to RC directory for local development
 cp .env RC/.env
