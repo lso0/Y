@@ -54,3 +54,4 @@ The script will:
 python3 rc_a.py -a 1 2 -p "Project1" "Project2" -x c_p
 
 <3>
+hello
