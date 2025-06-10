@@ -4,25 +4,30 @@ FROM python:3.12-slim
 # Set working directory
 WORKDIR /app
 
-# Install infisical CLI
-RUN apt-get update && apt-get install -y curl && \
-    curl -L https://github.com/Infisical/infisical/releases/latest/download/infisical_linux_amd64.tar.gz | tar xz && \
-    mv infisical /usr/local/bin/ && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
 # Copy requirements first to leverage Docker cache
-COPY RC/requirements.txt .
+COPY RC/requirements.txt RC/
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r RC/requirements.txt
 
 # Copy the rest of the application
 COPY . .
+
+# Make shell script executable
+RUN chmod +x RC/shell.sh
 
 # Create a non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Command to run the RC automation
-CMD ["python", "RC/rc_a.py"] 
+# Set the working directory to RC
+WORKDIR /app/RC
+
+# Set environment variables (these can be overridden by docker-compose)
+ENV RC_E_1=""
+ENV RC_P_1=""
+ENV RC_E_2=""
+ENV RC_P_2=""
+
+# Command to run the shell script
+CMD ["/app/RC/shell.sh"] 

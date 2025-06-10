@@ -8,10 +8,9 @@ services:
       - ./RC/logs:/app/RC/logs
     environment:
       - INFISICAL_TOKEN=${INFISICAL_TOKEN}
-    command: >
-      bash -c "
-        if [ ! -f RC/.env ]; then
-          infisical export --env=prod --format=dotenv > RC/.env
-        fi
-        python RC/rc_a.py
-      " 
+      - RC_E_1=${RC_E_1}
+      - RC_P_1=${RC_P_1}
+      - RC_E_2=${RC_P_2}
+      - RC_P_2=${RC_P_2}
+    # Remove the default command to allow passing arguments
+    # command: /app/RC/shell.sh 
