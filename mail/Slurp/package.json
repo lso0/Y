@@ -1,0 +1,30 @@
+{
+  "name": "mailslurp-inbox-creator",
+  "version": "1.0.0",
+  "description": "A JavaScript script to create and manage MailSlurp email inboxes",
+  "main": "createInbox.js",
+  "scripts": {
+    "start": "node createInbox.js",
+    "create": "node createInbox.js create",
+    "list": "node createInbox.js list",
+    "create-temp": "node createInbox.js create-temp",
+    "create-virtual": "node createInbox.js create-virtual",
+    "help": "node createInbox.js"
+  },
+  "keywords": [
+    "mailslurp",
+    "email",
+    "inbox",
+    "testing",
+    "api"
+  ],
+  "author": "MailSlurp User",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+} 
