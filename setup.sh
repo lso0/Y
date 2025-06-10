@@ -23,9 +23,12 @@ fi
 echo "Please authenticate with Infisical..."
 infisical login
 
-# Export secrets to .env file
+# Export secrets to .env file in root directory
 echo "Fetching secrets from Infisical..."
-infisical export --env=prod --format=dotenv > RC/.env
+infisical export --env=prod --format=dotenv > .env
+
+# Also copy to RC directory for local development
+cp .env RC/.env
 
 # Build the Docker image
 echo "Building Docker image..."
