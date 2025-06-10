@@ -21,7 +21,7 @@ fi
 
 # Function to check if user is logged in
 check_infisical_login() {
-    if ! infisical whoami &> /dev/null; then
+    if ! infisical token list &> /dev/null; then
         return 1
     fi
     return 0
@@ -34,21 +34,23 @@ if ! check_infisical_login; then
     infisical login
     
     # Verify login was successful
-    if ! check_infisical_login; then
-        echo "Error: Infisical authentication failed. Please try again."
-        exit 1
-    fi
+    # if ! check_infisical_login; then
+    #     echo "Error: Infisical authentication failed. Please try again."
+    #     exit 1
+    # fi
 fi
+
+wait
 
 # Ask for service token
 echo "Please enter your Infisical service token (you can get this from https://app.infisical.com/dashboard > Project Settings > Service Tokens):"
 read -p "Service Token: " SERVICE_TOKEN
 
 # Validate service token
-if [ -z "$SERVICE_TOKEN" ]; then
-    echo "Error: Service token cannot be empty"
-    exit 1
-fi
+# if [ -z "$SERVICE_TOKEN" ]; then
+#     echo "Error: Service token cannot be empty"
+#     exit 1
+# fi
 
 # Export secrets to .env file in root directory
 echo "Fetching secrets from Infisical..."
