@@ -1,8 +1,8 @@
-# 🚀 RC Automation - Cross-Platform Setup
+# 🚀 RC Automation - Cross-Platform Containerized Solution
 
 A fully containerized automation solution that works consistently across **Linux**, **macOS**, and **Windows**.
 
-## ⚡ Quick Start (New Machines)
+## ⚡ Quick Start
 
 For new machines, use our one-command setup:
 
@@ -13,120 +13,83 @@ cd Y
 ./run.sh run
 ```
 
-That's it! The `auto-setup` command will:
-- ✅ Check system prerequisites automatically
-- ✅ Auto-install Docker (Linux only, with prompts)
-- ✅ Start Docker service if needed
-- ✅ Build the containerized environment
-- ✅ Complete the full setup process
+That's it! The `auto-setup` command handles everything automatically.
 
-## 🛠️ Available Commands
+## 🛠️ Main Commands
 
 | Command | Description |
 |---------|-------------|
-| `./run.sh auto-setup` | **Complete setup from scratch (recommended for new machines)** |
-| `./run.sh check` | Check system prerequisites |
-| `./run.sh install-docker` | Auto-install Docker (Linux only) |
-| `./run.sh setup` | Initial setup and build |
+| `./run.sh auto-setup` | **Complete setup from scratch (recommended)** |
 | `./run.sh run` | Run RC automation |
+| `./run.sh check` | Check system prerequisites |
 | `./run.sh shell` | Open interactive shell for debugging |
 | `./run.sh logs` | View container logs |
-| `./run.sh clean` | Clean up containers and images |
-| `./run.sh help` | Show help information |
+| `./run.sh help` | Show all available commands |
 
-## 📋 System Requirements
+## 📋 Requirements
 
-- **Operating System**: Linux, macOS, or Windows (with WSL2/Git Bash)
-- **Docker**: Will be auto-installed on Linux, manual installation required for macOS/Windows
-- **Memory**: At least 4GB RAM recommended
-- **Disk Space**: 2GB+ free space for Docker images
-- **Network**: Internet connection for downloading dependencies
+- **Docker** (auto-installed on Linux, manual on macOS/Windows)
+- **4GB+ RAM** and **2GB+ disk space**
+- **Internet connection** for dependencies
 
-## 🤖 Automated Setup (CI/CD)
+## 🌍 Platform Support
 
-For fully automated setups without prompts:
+- **Linux**: Full automation with Docker auto-installation
+- **macOS**: Guided setup with Docker Desktop  
+- **Windows**: WSL2/Git Bash support with Docker Desktop
 
-```bash
-export AUTO_INSTALL_DOCKER=true
-export AUTO_START_DOCKER=true
-./run.sh auto-setup
-./run.sh run
-```
+## 📚 Documentation
 
-## 🔧 Manual Setup (Advanced Users)
+### **📖 For Users**
+- **[Complete Setup Guide](docs/CONTAINERIZED_SETUP.md)** ⭐ **Most comprehensive**
+- **[Getting Started](docs/GETTING_STARTED.md)** - Step-by-step manual setup
+- **[Quick Commands](docs/ONE_COMMAND_SETUP.md)** - Auto-setup explained
 
-If you prefer step-by-step control:
+### **🔧 For Developers**  
+- **[Auto-Install Details](docs/AUTO_INSTALL_SUMMARY.md)** - Technical implementation
+- **[Scripts Documentation](scripts/README.md)** - Script organization
+- **[All Documentation](docs/README.md)** - Complete documentation index
 
-```bash
-./run.sh check          # Check system prerequisites
-./run.sh install-docker # Auto-install Docker (Linux only)
-./run.sh setup          # Initial setup and build
-./run.sh run            # Run automation
-```
+## 🚀 Key Features
 
-## 🌍 Cross-Platform Support
-
-### Linux (Recommended)
-- ✅ Full automation with Docker auto-installation
-- ✅ Supports Ubuntu, Debian, Kali, Fedora, CentOS, Arch
-- ✅ Intelligent distribution detection with fallbacks
-
-### macOS
-- ✅ Guided Docker Desktop installation
-- ✅ Complete setup automation after Docker installation
-
-### Windows
-- ✅ WSL2/Git Bash support
-- ✅ Guided Docker Desktop installation
-- ✅ Complete setup automation after Docker installation
+- **🌍 Cross-Platform**: Same commands work on Linux, macOS, Windows
+- **🐳 Containerized**: No host dependencies except Docker
+- **🤖 Auto-Installation**: One-command Docker setup on Linux
+- **🔍 Smart Checks**: Comprehensive prerequisite validation
+- **⚙️ CI/CD Ready**: Non-interactive automation support
 
 ## 🐛 Troubleshooting
-
-### Docker Issues
-- **Docker not installed**: Run `./run.sh auto-setup` for automatic installation (Linux)
-- **Docker not running**: Start Docker Desktop or run `sudo systemctl start docker` on Linux
-- **Permission issues**: Log out and back in after installation for group changes
 
 ### Quick Diagnostics
 ```bash
 ./run.sh check  # Comprehensive system check with solutions
 ```
 
-## 📚 Documentation
-
-- [`GETTING_STARTED.md`](GETTING_STARTED.md) - Detailed setup guide
-- [`AUTO_INSTALL_SUMMARY.md`](AUTO_INSTALL_SUMMARY.md) - Auto-installation features
-- [`ONE_COMMAND_SETUP.md`](ONE_COMMAND_SETUP.md) - Complete solution overview
-- [`CONTAINERIZED_SETUP.md`](CONTAINERIZED_SETUP.md) - Docker architecture details
-
-## 🎉 What's New
-
-- **🚀 One-Command Setup**: Complete automation from scratch
-- **🐳 Auto Docker Installation**: Intelligent installation across Linux distributions
-- **🔍 Smart System Checks**: Comprehensive prerequisite validation
-- **🌍 Cross-Platform**: Same commands work everywhere
-- **🤖 CI/CD Ready**: Non-interactive automation support
+### Common Issues
+- **Docker not installed**: Run `./run.sh auto-setup` for automatic installation
+- **Permission issues**: Log out/in after Docker installation for group changes
+- **Service not running**: Start Docker Desktop or `sudo systemctl start docker`
 
 ## 📁 Project Structure
 
 ```
-├── run.sh                    # Main automation script
-├── system-check.sh          # System prerequisites checker
-├── docker-compose.yml       # Container orchestration
-├── Dockerfile              # Container definition
-├── RC/                     # RevenueCat automation code
-├── auto/                   # Additional automation tools
-├── mail/                   # Email automation components
-└── docs/                   # Documentation files
+├── 🚀 run.sh                   # Main automation script  
+├── 📂 scripts/                 # Internal scripts
+├── 📂 docs/                    # Documentation
+├── 🐳 docker-compose.yml       # Container orchestration
+├── 🐳 Dockerfile              # Container definition
+├── 📂 RC/                     # RevenueCat automation code
+├── 📂 auto/                   # Additional automation tools
+└── 📂 mail/                   # Email automation components
 ```
 
 ## 🆘 Need Help?
 
-1. **Run system check**: `./run.sh check`
-2. **View help**: `./run.sh help`
-3. **Check logs**: `./run.sh logs`
-4. **Open debug shell**: `./run.sh shell`
+1. **📖 Read the docs**: [docs/README.md](docs/README.md)
+2. **🔍 Run diagnostics**: `./run.sh check`
+3. **🐛 Check logs**: `./run.sh logs`
+4. **💻 Debug mode**: `./run.sh shell`
 
 ---
 
-**Ready to get started?** Run `./run.sh auto-setup` and you'll be up and running in minutes! 🎊 
+**Ready to start?** Run `./run.sh auto-setup` and you'll be up and running in minutes! 🎊 
