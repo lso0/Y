@@ -1,20 +1,44 @@
+version: '3.8'
+
 services:
   rc-automation:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     volumes:
+      # Mount the entire project for development
       - .:/app
+      # Persistent storage for logs
       - ./RC/logs:/app/RC/logs
+      # Persistent storage for configuration
+      - ./config:/app/config
     env_file:
       - .env
     environment:
+      # Infisical Configuration
       - INFISICAL_TOKEN=${INFISICAL_TOKEN:-}
-      - RC_E_1=${RC_E_1}
-      - RC_P_1=${RC_P_1}
-      - RC_E_2=${RC_E_2}
-      - RC_P_2=${RC_P_2}
+      
+      # RC Automation Variables
+      - RC_E_1=${RC_E_1:-}
+      - RC_P_1=${RC_P_1:-}
+      - RC_E_2=${RC_E_2:-}
+      - RC_P_2=${RC_P_2:-}
+      
+      # Tailscale Configuration
       - TAILSCALE_IP=${TAILSCALE_IP:-}
       - TAILSCALE_ENABLED=${TAILSCALE_ENABLED:-false}
       - TAILSCALE_HOSTNAME=${TAILSCALE_HOSTNAME:-}
-    network_mode: "host"  # Use host networking to access Tailscale
-    # Remove the default command to allow passing arguments
-    # command: /app/RC/shell.sh 
+      
+      # Container Configuration
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    
+    # Use host networking for Tailscale connectivity (Linux only)
+    network_mode: "${NETWORK_MODE:-bridge}"
+    
+    # Interactive mode for shell access
+    stdin_open: true
+    tty: true
+    
+    # Override default entrypoint when needed
+    # command: ["help"]  # Uncomment to see help by default 

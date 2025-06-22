@@ -4,8 +4,8 @@
 echo "🔒 Setting up Tailscale secure networking..."
 if [ ! -f ".env.tailscale" ]; then
     echo "Running Tailscale setup..."
-    chmod +x tailscale-setup.sh
-    ./tailscale-setup.sh
+    chmod +x tailscale/tailscale-setup.sh
+    ./tailscale/tailscale-setup.sh
 fi
 
 # Load Tailscale environment variables
@@ -17,7 +17,7 @@ fi
 # Check if Infisical CLI is installed
 if ! command -v infisical &> /dev/null; then
     echo "Installing Infisical CLI..."
-    curl -L https://github.com/Infisical/infisical/releases/latest/download/infisical_darwin_arm64.tar.gz | tar xz
+    curl -L https://github.com/Infisical/infisical/releases/latest/download/infisical_linux_amd64.tar.gz | tar xz
     sudo mv infisical /usr/local/bin/
 fi
 
