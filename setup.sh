@@ -19,32 +19,9 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
-# Function to check if user is logged in
-check_infisical_login() {
-    if ! infisical token list &> /dev/null; then
-        return 1
-    fi
-    return 0
-}
-
-# Authenticate with Infisical
-echo "Checking Infisical authentication..."
-if ! check_infisical_login; then
-    echo "Please authenticate with Infisical..."
-    infisical login
-    
-    # Verify login was successful
-    # if ! check_infisical_login; then
-    #     echo "Error: Infisical authentication failed. Please try again."
-    #     exit 1
-    # fi
-fi
-
-wait
-
 # Export secrets to .env file using the advanced sync script
 echo "Fetching secrets from Infisical using sync script..."
-./infisical/sync-secrets-advanced.sh --env=prod --quiet
+./infisical/sync-secrets-advanced.sh -e production -q
 
 # Also copy to RC directory for local development
 cp .env RC/.env
