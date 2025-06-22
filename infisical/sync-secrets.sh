@@ -21,9 +21,19 @@ if ! command -v infisical &> /dev/null; then
 fi
 
 # Check if user is logged in
-if ! infisical user --help &> /dev/null; then
-    echo "❌ Please login to Infisical first with: infisical login"
-    exit 1
+if ! timeout 3 infisical export --projectId="$PROJECT_ID" --env="$ENVIRONMENT" --format=dotenv --silent >/dev/null 2>&1; then
+    echo "❌ You are not logged into Infisical."
+    echo "🔐 Automatically starting login process..."
+    echo ""
+    
+    # Automatically trigger login
+    if infisical login; then
+        echo "✅ Login successful! Continuing with secrets sync..."
+        echo ""
+    else
+        echo "❌ Login failed. Please check your credentials and try again."
+        exit 1
+    fi
 fi
 
 # Export secrets to .env file using project ID directly (fully automated)

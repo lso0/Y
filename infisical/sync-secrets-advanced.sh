@@ -117,10 +117,18 @@ if ! command -v infisical &> /dev/null; then
     exit 1
 fi
 
-# Check if user is logged in by trying to run a command that requires auth
-if ! infisical export --help &> /dev/null; then
-    log_error "Cannot access Infisical. Please login first with: infisical login"
-    exit 1
+# Check if user is logged in by testing export command with timeout
+if ! timeout 3 infisical export --projectId="$PROJECT_ID" --env="$ENVIRONMENT" --format=dotenv --silent >/dev/null 2>&1; then
+    log_error "You are not logged into Infisical."
+    log_info "🔐 Automatically starting login process..."
+    
+    # Automatically trigger login
+    if infisical login; then
+        log_success "Login successful! Continuing with secrets sync..."
+    else
+        log_error "Login failed. Please check your credentials and try again."
+        exit 1
+    fi
 fi
 
 # Create backup of existing env file if it exists

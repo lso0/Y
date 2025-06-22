@@ -19,12 +19,38 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
+# Check if user is logged into Infisical
+echo "Checking Infisical authentication..."
+if ! timeout 3 infisical export --projectId="13bce4c5-1ffc-478b-b1ce-76726074f358" --env="dev" --format=dotenv --silent >/dev/null 2>&1; then
+    echo "❌ You are not logged into Infisical."
+    echo "🔐 Automatically starting login process..."
+    echo ""
+    
+    # Automatically trigger login
+    if infisical login; then
+        echo "✅ Login successful! Continuing with setup..."
+        echo ""
+    else
+        echo "❌ Login failed. Please check your credentials and try again."
+        echo "You can run this setup script again after resolving login issues:"
+        echo "   ./setup.sh"
+        exit 1
+    fi
+else
+    echo "✅ Infisical authentication verified"
+fi
+
 # Export secrets to .env file using the advanced sync script
 echo "Fetching secrets from Infisical using sync script..."
-./infisical/sync-secrets-advanced.sh -e production -q
+./infisical/sync-secrets-advanced.sh -e dev -q
 
 # Also copy to RC directory for local development
 cp .env RC/.env
+
+# Load environment variables into current shell before building
+set -a  # automatically export all variables
+source .env
+set +a  # turn off automatic export
 
 # Build the Docker image
 echo "Building Docker image..."

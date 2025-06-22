@@ -7,7 +7,7 @@ services:
     env_file:
       - .env
     environment:
-      - INFISICAL_TOKEN=${INFISICAL_TOKEN}
+      - INFISICAL_TOKEN=${INFISICAL_TOKEN:-}
       - RC_E_1=${RC_E_1}
       - RC_P_1=${RC_P_1}
       - RC_E_2=${RC_E_2}
