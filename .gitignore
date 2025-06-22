@@ -8,3 +8,7 @@ __pycache__/
 venv/
 ENV/ a/downloaded_files/
 .env.secrets
+
+# Sensitive RevenueCat data
+RC/db/*.json
+.infisical.json

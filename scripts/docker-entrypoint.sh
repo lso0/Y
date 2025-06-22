@@ -28,6 +28,12 @@ print_info() {
 
 # Function to check if Infisical is authenticated
 check_infisical_auth() {
+    # Check if we have a real Infisical CLI
+    if ! infisical --version 2>/dev/null | grep -q "infisical version"; then
+        print_warning "Using fallback Infisical - skipping authentication check"
+        return 0
+    fi
+    
     if [ -z "$INFISICAL_TOKEN" ]; then
         print_error "INFISICAL_TOKEN environment variable is not set"
         print_info "Please set your Infisical token in the .env file or docker-compose.yml"
@@ -49,19 +55,35 @@ check_infisical_auth() {
 setup_environment() {
     print_info "Setting up containerized environment..."
     
-    # Check Infisical authentication
-    if ! check_infisical_auth; then
-        print_error "Cannot proceed without valid Infisical authentication"
-        exit 1
-    fi
-    
-    # Fetch secrets from Infisical
-    print_info "Fetching secrets from Infisical..."
-    if infisical export --projectId="13bce4c5-1ffc-478b-b1ce-76726074f358" --env="dev" --format=dotenv > /app/.env.secrets; then
-        print_status "Secrets fetched successfully"
+    # Check if we have a real Infisical CLI or fallback
+    if infisical --version 2>/dev/null | grep -q "infisical version"; then
+        print_info "Using real Infisical CLI..."
+        # Check Infisical authentication
+        if ! check_infisical_auth; then
+            print_error "Cannot proceed without valid Infisical authentication"
+            exit 1
+        fi
+        
+        # Fetch secrets from Infisical
+        print_info "Fetching secrets from Infisical..."
+        if infisical export --projectId="13bce4c5-1ffc-478b-b1ce-76726074f358" --env="dev" --format=dotenv > /app/.env.secrets; then
+            print_status "Secrets fetched successfully"
+        else
+            print_error "Failed to fetch secrets from Infisical"
+            exit 1
+        fi
     else
-        print_error "Failed to fetch secrets from Infisical"
-        exit 1
+        print_warning "Using fallback Infisical - will use environment variables from .env"
+        # Use fallback - create .env.secrets from current environment
+        print_info "Creating environment file from current variables..."
+        infisical export > /app/.env.secrets 2>/dev/null || {
+            echo "# Environment variables from docker-compose" > /app/.env.secrets
+            echo "RC_E_1=${RC_E_1:-}" >> /app/.env.secrets  
+            echo "RC_P_1=${RC_P_1:-}" >> /app/.env.secrets
+            echo "RC_E_2=${RC_E_2:-}" >> /app/.env.secrets
+            echo "RC_P_2=${RC_P_2:-}" >> /app/.env.secrets
+        }
+        print_status "Environment file created from current variables"
     fi
     
     # Handle Tailscale configuration

@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     bash \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Infisical CLI (optional - install if download works)
+# Install Infisical CLI (optional - install if download works) - v2
 RUN echo "Attempting to install Infisical CLI..." && \
     ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then \
@@ -26,10 +26,19 @@ RUN echo "Attempting to install Infisical CLI..." && \
      chmod +x /usr/local/bin/infisical && \
      infisical --version && \
      echo "✅ Infisical CLI installed successfully") || \
-    (echo "⚠️  Infisical CLI installation failed - continuing without it" && \
-     echo "#!/bin/bash" > /usr/local/bin/infisical && \
-     echo "echo 'Infisical CLI not available. Please install manually or set environment variables directly.'" >> /usr/local/bin/infisical && \
-     chmod +x /usr/local/bin/infisical)
+         (echo "⚠️  Infisical CLI installation failed - creating fallback" && \
+      echo "#!/bin/bash" > /usr/local/bin/infisical && \
+      echo 'if [ "$1" = "export" ]; then' >> /usr/local/bin/infisical && \
+      echo '  echo "# Infisical CLI not available - using environment variables from .env file"' >> /usr/local/bin/infisical && \
+      echo '  echo "RC_E_1=${RC_E_1:-}"' >> /usr/local/bin/infisical && \
+      echo '  echo "RC_P_1=${RC_P_1:-}"' >> /usr/local/bin/infisical && \
+      echo '  echo "RC_E_2=${RC_E_2:-}"' >> /usr/local/bin/infisical && \
+      echo '  echo "RC_P_2=${RC_P_2:-}"' >> /usr/local/bin/infisical && \
+      echo 'else' >> /usr/local/bin/infisical && \
+      echo '  echo "Infisical CLI not available. Please set environment variables in .env file."' >> /usr/local/bin/infisical && \
+      echo '  exit 1' >> /usr/local/bin/infisical && \
+      echo 'fi' >> /usr/local/bin/infisical && \
+      chmod +x /usr/local/bin/infisical)
 
 # Set working directory
 WORKDIR /app
@@ -50,14 +59,13 @@ RUN chmod +x run.sh && \
     chmod +x tailscale/*.sh && \
     find RC/ -name "*.sh" -exec chmod +x {} \;
 
-# Create a non-root user
+# Create a non-root user and set up directories
 RUN useradd -m appuser && \
+    mkdir -p /app/config /app/logs /app/RC/logs && \
     chown -R appuser:appuser /app && \
-    chmod +x /app/scripts/docker-entrypoint.sh
+    chmod +x /app/scripts/docker-entrypoint.sh && \
+    chmod -R 755 /app/config /app/logs /app/RC/logs
 USER appuser
-
-# Create directories for configuration and logs
-RUN mkdir -p /app/config /app/logs
 
 # Set the working directory to app root
 WORKDIR /app
