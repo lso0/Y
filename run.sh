@@ -628,8 +628,8 @@ run_basic_system_check() {
     print_info "Running basic system check..."
     
     # Run the comprehensive system check but don't exit on failure
-    if [ -f "./system-check.sh" ]; then
-        if ./system-check.sh; then
+    if [ -f "./scripts/system-check.sh" ]; then
+        if ./scripts/system-check.sh; then
             print_status "System check passed"
         else
             print_warning "System check found some issues, but continuing with setup"
@@ -671,14 +671,14 @@ main() {
             
             # Step 1: System Check
             print_info "Step 1/4: Running system prerequisites check..."
-            if [ -f "./system-check.sh" ]; then
-                if ./system-check.sh; then
+            if [ -f "./scripts/system-check.sh" ]; then
+                if ./scripts/system-check.sh; then
                     print_status "System check completed"
                 else
                     print_warning "System check found issues, but continuing..."
                 fi
             else
-                print_warning "system-check.sh not found, skipping detailed check"
+                print_warning "scripts/system-check.sh not found, skipping detailed check"
             fi
             echo ""
             
@@ -813,10 +813,10 @@ main() {
             ;;
         check)
             print_info "Running system prerequisites check..."
-            if [ -f "./system-check.sh" ]; then
-                ./system-check.sh
+            if [ -f "./scripts/system-check.sh" ]; then
+                ./scripts/system-check.sh
             else
-                print_error "system-check.sh not found"
+                print_error "scripts/system-check.sh not found"
                 print_info "Please ensure you're in the correct project directory"
                 exit 1
             fi

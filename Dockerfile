@@ -38,7 +38,8 @@ RUN pip install --no-cache-dir -r RC/requirements.txt
 COPY . .
 
 # Copy and make setup scripts executable
-RUN chmod +x setup.sh && \
+RUN chmod +x run.sh && \
+    chmod +x scripts/*.sh && \
     chmod +x tailscale/*.sh && \
     find RC/ -name "*.sh" -exec chmod +x {} \;
 
@@ -52,12 +53,6 @@ RUN mkdir -p /app/config /app/logs
 # Set the working directory to app root
 WORKDIR /app
 
-# Create entrypoint script
-COPY docker-entrypoint.sh /app/
-USER root
-RUN chmod +x /app/docker-entrypoint.sh
-USER appuser
-
 # Set environment variables with defaults
 ENV RC_E_1=""
 ENV RC_P_1=""
@@ -68,6 +63,6 @@ ENV TAILSCALE_IP=""
 ENV TAILSCALE_ENABLED="false"
 ENV TAILSCALE_HOSTNAME=""
 
-# Use the entrypoint script
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+# Use the entrypoint script from scripts directory
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 CMD ["help"] 
