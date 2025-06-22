@@ -42,20 +42,9 @@ fi
 
 wait
 
-# Ask for service token
-echo "Please enter your Infisical service token (you can get this from https://app.infisical.com/dashboard > Project Settings > Service Tokens):"
-read -p "Service Token: " SERVICE_TOKEN
-
-# Validate service token
-# if [ -z "$SERVICE_TOKEN" ]; then
-#     echo "Error: Service token cannot be empty"
-#     exit 1
-# fi
-
-# Export secrets to .env file in root directory
-echo "Fetching secrets from Infisical..."
-infisical export --env=prod --format=dotenv > .env
-wait
+# Export secrets to .env file using the advanced sync script
+echo "Fetching secrets from Infisical using sync script..."
+./infisical/sync-secrets-advanced.sh --env=prod --quiet
 
 # Also copy to RC directory for local development
 cp .env RC/.env
