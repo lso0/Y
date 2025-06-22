@@ -581,6 +581,7 @@ show_usage() {
     echo -e "${GREEN}Commands:${NC}"
     echo "  auto-setup              Complete setup from scratch (check + install + setup)"
     echo "  check                   Check system prerequisites"
+    echo "  tailscale-check         Check Tailscale installation, status, and connectivity"
     echo "  install-docker          Auto-install Docker (Linux only)"
     echo "  setup                   Initial setup and build"
     echo "  run [args...]          Run RC automation"
@@ -593,6 +594,7 @@ show_usage() {
     echo -e "${GREEN}Examples:${NC}"
     echo "  ./run.sh auto-setup     # Complete setup for new machines"
     echo "  ./run.sh check          # Check system prerequisites"
+    echo "  ./run.sh tailscale-check # Check Tailscale VPN status"
     echo "  ./run.sh install-docker # Auto-install Docker (Linux)"
     echo "  ./run.sh setup          # First time setup"
     echo "  ./run.sh run            # Run automation"
@@ -643,7 +645,7 @@ run_basic_system_check() {
 main() {
     # Commands that don't require Docker to be installed
     case "${1:-help}" in
-        check|help|--help|-h|install-docker|auto-setup)
+        check|tailscale-check|help|--help|-h|install-docker|auto-setup)
             # Handle these commands without Docker prerequisites
             ;;
         *)
@@ -818,6 +820,17 @@ main() {
             else
                 print_error "scripts/system-check.sh not found"
                 print_info "Please ensure you're in the correct project directory"
+                exit 1
+            fi
+            ;;
+        tailscale-check)
+            print_info "Running Tailscale comprehensive status check..."
+            if [ -f "./scripts/tailscale-check.sh" ]; then
+                ./scripts/tailscale-check.sh
+            else
+                print_error "scripts/tailscale-check.sh not found"
+                print_info "Please ensure you're in the correct project directory"
+                print_info "Or run the existing Tailscale test with: ./tailscale/test-tailscale.sh"
                 exit 1
             fi
             ;;

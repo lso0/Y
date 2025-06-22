@@ -47,7 +47,14 @@ class TailscaleClient:
     def get_peers(self) -> List[Dict]:
         """Get list of Tailscale peers."""
         status = self.get_status()
-        return [peer for peer in status.get('Peer', {}).values()] if status else []
+        if not status or 'Peer' not in status:
+            return []
+        
+        peers_dict = status.get('Peer')
+        if not peers_dict or not isinstance(peers_dict, dict):
+            return []
+            
+        return [peer for peer in peers_dict.values()]
     
     def is_peer_online(self, peer_ip: str) -> bool:
         """Check if a specific peer is online."""
