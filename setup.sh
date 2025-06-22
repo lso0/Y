@@ -1,5 +1,19 @@
 #!/bin/bash
 
+# Setup Tailscale first
+echo "🔒 Setting up Tailscale secure networking..."
+if [ ! -f ".env.tailscale" ]; then
+    echo "Running Tailscale setup..."
+    chmod +x tailscale-setup.sh
+    ./tailscale-setup.sh
+fi
+
+# Load Tailscale environment variables
+if [ -f ".env.tailscale" ]; then
+    source .env.tailscale
+    echo "✅ Tailscale configuration loaded"
+fi
+
 # Check if Infisical CLI is installed
 if ! command -v infisical &> /dev/null; then
     echo "Installing Infisical CLI..."
@@ -43,6 +57,14 @@ fi
 # Export secrets to .env file using the advanced sync script
 echo "Fetching secrets from Infisical using sync script..."
 ./infisical/sync-secrets-advanced.sh -e dev -q
+
+# Merge Tailscale environment variables into .env file
+if [ -f ".env.tailscale" ]; then
+    echo "" >> .env
+    echo "# Tailscale Configuration" >> .env
+    cat .env.tailscale >> .env
+    echo "✅ Tailscale environment variables added to .env"
+fi
 
 # Also copy to RC directory for local development
 cp .env RC/.env

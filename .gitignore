@@ -3,6 +3,7 @@
 __pycache__/
 *.pyc
 .env
+.env.tailscale
 .venv
 venv/
 ENV/ a/downloaded_files/

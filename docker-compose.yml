@@ -12,5 +12,9 @@ services:
       - RC_P_1=${RC_P_1}
       - RC_E_2=${RC_E_2}
       - RC_P_2=${RC_P_2}
+      - TAILSCALE_IP=${TAILSCALE_IP:-}
+      - TAILSCALE_ENABLED=${TAILSCALE_ENABLED:-false}
+      - TAILSCALE_HOSTNAME=${TAILSCALE_HOSTNAME:-}
+    network_mode: "host"  # Use host networking to access Tailscale
     # Remove the default command to allow passing arguments
     # command: /app/RC/shell.sh 
