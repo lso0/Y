@@ -402,7 +402,8 @@ check_docker() {
     fi
     
     # Check if Docker daemon is running
-    if ! docker info &> /dev/null; then
+    # Try with sudo if regular docker command fails (user not in docker group)
+    if ! docker info &> /dev/null && ! sudo docker info &> /dev/null; then
         print_error "Docker is installed but not running"
         echo ""
         
@@ -423,7 +424,7 @@ check_docker() {
                     print_status "Docker service started successfully"
                     # Wait a moment for Docker to fully start
                     sleep 3
-                    if docker info &> /dev/null; then
+                    if docker info &> /dev/null || sudo docker info &> /dev/null; then
                         print_status "Docker daemon is now running"
                     else
                         print_warning "Docker service started but daemon not responding yet"
@@ -496,12 +497,18 @@ check_docker() {
 
 # Enhanced Docker Compose checking
 check_docker_compose() {
+    # Check if user needs sudo for docker commands
+    local use_sudo=""
+    if ! docker info &> /dev/null && sudo docker info &> /dev/null; then
+        use_sudo="sudo "
+    fi
+    
     if command -v docker-compose &> /dev/null; then
-        COMPOSE_CMD="docker-compose"
-        COMPOSE_VERSION=$(docker-compose --version | cut -d' ' -f3 | cut -d',' -f1)
-    elif docker compose version &> /dev/null; then
-        COMPOSE_CMD="docker compose"
-        COMPOSE_VERSION=$(docker compose version --short)
+        COMPOSE_CMD="${use_sudo}docker-compose"
+        COMPOSE_VERSION=$(${use_sudo}docker-compose --version | cut -d' ' -f3 | cut -d',' -f1)
+    elif ${use_sudo}docker compose version &> /dev/null; then
+        COMPOSE_CMD="${use_sudo}docker compose"
+        COMPOSE_VERSION=$(${use_sudo}docker compose version --short)
     else
         print_error "Docker Compose is not available"
         echo ""
@@ -730,7 +737,7 @@ main() {
             
             # Step 3: Start Docker if needed
             print_info "Step 3/4: Ensuring Docker service is running..."
-            if ! docker info &> /dev/null; then
+            if ! docker info &> /dev/null && ! sudo docker info &> /dev/null; then
                 if [ "$OS" = "Linux" ]; then
                     if [ "${AUTO_START_DOCKER:-}" = "true" ] || [ "${CI:-}" = "true" ]; then
                         print_info "Non-interactive mode: Starting Docker service..."
@@ -774,7 +781,7 @@ main() {
             local retry_count=0
             local max_retries=10
             while [ $retry_count -lt $max_retries ]; do
-                if docker info &> /dev/null; then
+                if docker info &> /dev/null || sudo docker info &> /dev/null; then
                     print_status "Docker is ready"
                     break
                 fi

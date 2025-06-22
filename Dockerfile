@@ -12,18 +12,24 @@ RUN apt-get update && apt-get install -y \
     bash \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Infisical CLI (detect architecture and install appropriate version)
-RUN ARCH=$(dpkg --print-architecture) && \
+# Install Infisical CLI (optional - install if download works)
+RUN echo "Attempting to install Infisical CLI..." && \
+    ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then \
-        INFISICAL_ARCH="linux_amd64"; \
+        INFISICAL_ARCH="amd64"; \
     elif [ "$ARCH" = "arm64" ]; then \
-        INFISICAL_ARCH="linux_arm64"; \
+        INFISICAL_ARCH="arm64"; \
     else \
-        echo "Unsupported architecture: $ARCH" && exit 1; \
+        echo "Unsupported architecture: $ARCH, skipping Infisical" && exit 0; \
     fi && \
-    curl -L "https://github.com/Infisical/infisical/releases/latest/download/infisical_${INFISICAL_ARCH}.tar.gz" | tar xz && \
-    mv infisical /usr/local/bin/ && \
-    chmod +x /usr/local/bin/infisical
+    (curl -L -o /usr/local/bin/infisical "https://github.com/Infisical/infisical/releases/download/infisical-cli%2Fv0.28.1/infisical_0.28.1_linux_${INFISICAL_ARCH}" && \
+     chmod +x /usr/local/bin/infisical && \
+     infisical --version && \
+     echo "✅ Infisical CLI installed successfully") || \
+    (echo "⚠️  Infisical CLI installation failed - continuing without it" && \
+     echo "#!/bin/bash" > /usr/local/bin/infisical && \
+     echo "echo 'Infisical CLI not available. Please install manually or set environment variables directly.'" >> /usr/local/bin/infisical && \
+     chmod +x /usr/local/bin/infisical)
 
 # Set working directory
 WORKDIR /app
@@ -40,11 +46,14 @@ COPY . .
 # Copy and make setup scripts executable
 RUN chmod +x run.sh && \
     chmod +x scripts/*.sh && \
+    chmod +x scripts/docker-entrypoint.sh && \
     chmod +x tailscale/*.sh && \
     find RC/ -name "*.sh" -exec chmod +x {} \;
 
 # Create a non-root user
-RUN useradd -m appuser && chown -R appuser:appuser /app
+RUN useradd -m appuser && \
+    chown -R appuser:appuser /app && \
+    chmod +x /app/scripts/docker-entrypoint.sh
 USER appuser
 
 # Create directories for configuration and logs
