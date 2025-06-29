@@ -46,42 +46,52 @@ type model struct {
 }
 
 var (
-	// Enhanced color palette
-	primaryColor   = lipgloss.Color("#6366F1") // Indigo
-	secondaryColor = lipgloss.Color("#8B5CF6") // Purple
-	accentColor    = lipgloss.Color("#10B981") // Emerald
-	warningColor   = lipgloss.Color("#F59E0B") // Amber
-	errorColor     = lipgloss.Color("#EF4444") // Red
-	textColor      = lipgloss.Color("#F8FAFC") // Slate-50
-	mutedColor     = lipgloss.Color("#94A3B8") // Slate-400
-	backgroundDark = lipgloss.Color("#1E293B") // Slate-800
+	// Subtle dark color palette
+	primaryColor   = lipgloss.Color("#4A5568") // Gray-600
+	secondaryColor = lipgloss.Color("#2D3748") // Gray-700
+	accentColor    = lipgloss.Color("#68D391") // Green-300
+	warningColor   = lipgloss.Color("#F6AD55") // Orange-300
+	errorColor     = lipgloss.Color("#FC8181") // Red-300
+	textColor      = lipgloss.Color("#E2E8F0") // Gray-200
+	mutedColor     = lipgloss.Color("#A0AEC0") // Gray-400
+	backgroundDark = lipgloss.Color("#1A202C") // Gray-900
+	borderColor    = lipgloss.Color("#4A5568") // Gray-600
 
 	// Enhanced styles
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(textColor).
-			Background(primaryColor).
+			Background(secondaryColor).
 			Padding(1, 2).
-			Margin(0, 0, 1, 0).
+			Margin(0, 0, 2, 0).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(primaryColor)
+			BorderForeground(borderColor).
+			Align(lipgloss.Center)
 
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(primaryColor).
+			Foreground(accentColor).
 			Padding(0, 1).
-			Margin(1, 0, 1, 0)
+			Margin(1, 0, 2, 0)
 
 	menuStyle = lipgloss.NewStyle().
-			Foreground(accentColor).
-			Padding(0, 2)
+			Foreground(textColor).
+			Background(backgroundDark).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(borderColor).
+			Padding(0, 2).
+			Margin(0, 1, 0, 0).
+			Width(28)
 
 	selectedStyle = lipgloss.NewStyle().
 			Foreground(textColor).
-			Background(primaryColor).
+			Background(secondaryColor).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(accentColor).
 			Bold(true).
 			Padding(0, 2).
-			Margin(0, 0, 0, 1)
+			Margin(0, 1, 0, 0).
+			Width(28)
 
 	emailListStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -91,13 +101,18 @@ var (
 
 	emailItemStyle = lipgloss.NewStyle().
 			Foreground(textColor).
-			Padding(0, 1).
+			Background(backgroundDark).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(borderColor).
+			Padding(0, 2).
 			Margin(0, 0, 1, 0)
 
 	emailSelectedStyle = lipgloss.NewStyle().
 				Foreground(textColor).
 				Background(secondaryColor).
-				Padding(0, 1).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(accentColor).
+				Padding(0, 2).
 				Margin(0, 0, 1, 0).
 				Bold(true)
 
@@ -108,23 +123,26 @@ var (
 	errorStyle = lipgloss.NewStyle().
 			Foreground(errorColor).
 			Bold(true).
-			Padding(0, 1).
+			Padding(0, 2).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(errorColor)
+			BorderForeground(errorColor).
+			Background(backgroundDark)
 
 	successStyle = lipgloss.NewStyle().
 			Foreground(accentColor).
 			Bold(true).
-			Padding(0, 1).
+			Padding(0, 2).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(accentColor)
+			BorderForeground(accentColor).
+			Background(backgroundDark)
 
 	inputStyle = lipgloss.NewStyle().
 			Foreground(textColor).
-			Background(backgroundDark).
-			Padding(0, 1).
+			Background(secondaryColor).
+			Padding(0, 2).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(primaryColor)
+			BorderForeground(accentColor).
+			Width(40)
 
 	infoStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).
@@ -570,15 +588,13 @@ func (m model) View() string {
 		s.WriteString("\n")
 
 		for i, choice := range m.choices {
-			cursor := "  "
-			if m.cursor == i {
-				cursor = "▶ "
-			}
+			number := fmt.Sprintf("%d. ", i+1)
+			content := number + choice
 
 			if m.cursor == i {
-				s.WriteString(selectedStyle.Render(cursor + choice))
+				s.WriteString(selectedStyle.Render(content))
 			} else {
-				s.WriteString(menuStyle.Render(cursor + choice))
+				s.WriteString(menuStyle.Render(content))
 			}
 			s.WriteString("\n")
 		}
@@ -659,10 +675,7 @@ func (m model) renderEmailList() string {
 	var items []string
 
 	for i, email := range m.emails {
-		cursor := "  "
-		if m.cursor == i {
-			cursor = "▶ "
-		}
+		number := fmt.Sprintf("%d. ", i+1)
 
 		unreadMarker := " "
 		if email.IsUnread {
@@ -688,7 +701,7 @@ func (m model) renderEmailList() string {
 		}
 
 		line := fmt.Sprintf("%s%s %s  %-20s  %s",
-			cursor, unreadMarker, timeStr, fromDisplay, subjectDisplay)
+			number, unreadMarker, timeStr, fromDisplay, subjectDisplay)
 
 		if m.cursor == i {
 			items = append(items, emailSelectedStyle.Render(line))
