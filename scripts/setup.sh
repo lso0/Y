@@ -66,8 +66,8 @@ if [ -f ".env.tailscale" ]; then
     echo "✅ Tailscale environment variables added to .env"
 fi
 
-# Also copy to RC directory for local development
-cp .env RC/.env
+# RC will now access .env from the root directory directly
+# No need to copy to RC/.env anymore
 
 # Load environment variables into current shell before building
 set -a  # automatically export all variables

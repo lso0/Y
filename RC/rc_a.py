@@ -418,8 +418,8 @@ def process_account(account_id, action, project_names):
         fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         process_logger.addHandler(fh)
         
-        # Load environment variables
-        load_dotenv()
+        # Load environment variables from parent directory
+        load_dotenv('../.env')
         
         # Get account number from the account argument (e.g., A1 -> 1)
         account_num = account_id.lstrip('A')

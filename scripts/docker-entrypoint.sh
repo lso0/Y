@@ -95,8 +95,8 @@ setup_environment() {
         print_status "Tailscale configuration added"
     fi
     
-    # Copy final environment file to RC directory
-    cp /app/.env.secrets /app/RC/.env
+    # Copy final environment file to root directory (RC will access from there)
+    cp /app/.env.secrets /app/.env
     
     print_status "Environment setup complete!"
 }
@@ -121,14 +121,14 @@ run_rc_automation() {
     fi
     
     # Ensure environment is set up
-    if [ ! -f "/app/RC/.env" ]; then
+    if [ ! -f "/app/.env" ]; then
         print_warning "Environment not set up, running setup first..."
         setup_environment
     fi
     
     # Load environment variables
     set -a
-    source /app/RC/.env
+    source /app/.env
     set +a
     
     # Change to RC directory and run the automation
