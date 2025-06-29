@@ -536,30 +536,43 @@ check_docker_compose() {
 set_environment() {
     detect_os
     
-    # Create .env file if it doesn't exist
+    # Create .env file using Infisical if it doesn't exist
     if [ ! -f ".env" ]; then
-        print_warning ".env file not found, creating template..."
-        cat > .env << 'EOF'
-# Infisical Configuration (REQUIRED)
-INFISICAL_TOKEN=your_infisical_token_here
-
-# RC Automation Variables (Optional - will be fetched from Infisical)
-RC_E_1=
-RC_P_1=
-RC_E_2=
-RC_P_2=
-
-# Tailscale Configuration (Optional)
-TAILSCALE_IP=
-TAILSCALE_ENABLED=false
-TAILSCALE_HOSTNAME=
-
-# Docker Configuration
-NETWORK_MODE=bridge
-EOF
-        print_info "Please edit .env file and add your INFISICAL_TOKEN"
-        print_info "Then run this script again"
-        return 1
+        print_info ".env file not found, fetching secrets from Infisical..."
+        
+        # Check if infisical command is available
+        if ! command -v infisical &> /dev/null; then
+            print_error "Infisical CLI is not installed or not in PATH"
+            print_info "Please install Infisical CLI first: https://infisical.com/docs/cli/overview"
+            return 1
+        fi
+        
+        # Check if .infisical.json exists for project configuration
+        if [ ! -f ".infisical.json" ]; then
+            print_error ".infisical.json file not found"
+            print_info "Please ensure you're in the correct project directory"
+            return 1
+        fi
+        
+        # Export secrets to .env file using project ID and environment directly
+        print_info "Exporting secrets from Infisical to .env file..."
+        local project_id="13bce4c5-1ffc-478b-b1ce-76726074f358"
+        local environment="dev"
+        
+        if ! infisical export --projectId="$project_id" --env="$environment" --format=dotenv-export > .env; then
+            print_error "Failed to export secrets from Infisical"
+            print_info "Please check your Infisical authentication and ensure you have access to:"
+            print_info "  - Project ID: $project_id"
+            print_info "  - Environment: $environment"
+            print_info "You can also try running: infisical login"
+            # Clean up partial .env file if it was created
+            [ -f ".env" ] && rm .env
+            return 1
+        fi
+        
+        print_status ".env file created successfully from Infisical"
+    else
+        print_info ".env file already exists, skipping Infisical export"
     fi
     
     # Set network mode based on OS
@@ -610,7 +623,7 @@ show_usage() {
     echo ""
     echo -e "${GREEN}Requirements:${NC}"
     echo "  - Docker Desktop installed and running"
-    echo "  - INFISICAL_TOKEN set in .env file"
+    echo "  - Infisical CLI installed and authenticated"
     echo ""
     echo -e "${YELLOW}OS Support:${NC} Linux, macOS, Windows (WSL/Git Bash)"
     echo ""
