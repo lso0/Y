@@ -14,6 +14,9 @@ type state int
 
 const (
 	mainMenu state = iota
+	ytMenu
+	fmMenu
+	devMenu
 	addAccount
 	viewAccount
 	readEmails
@@ -136,10 +139,8 @@ func initialModel() model {
 		log.Fatal(err)
 	}
 
-	choices := []string{"📧 Read Emails", "✉️  Compose Email (Coming Soon)", "👤 Account Settings", "❌ Exit"}
-	if !config.HasAccount() {
-		choices = []string{"👤 Setup Account", "❌ Exit"}
-	}
+	// Main menu with three categories
+	choices := []string{"YT (YouTube)", "FM (FastMail)", "dev (Development)"}
 
 	return model{
 		config:   config,
@@ -159,6 +160,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.state {
 		case mainMenu:
 			return m.updateMainMenu(msg)
+		case ytMenu:
+			return m.updateYTMenu(msg)
+		case fmMenu:
+			return m.updateFMMenu(msg)
+		case devMenu:
+			return m.updateDevMenu(msg)
 		case addAccount:
 			return m.updateAddAccount(msg)
 		case viewAccount:
@@ -174,7 +181,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.message = errorStyle.Render(fmt.Sprintf("Error fetching emails: %v", msg.err))
-			m.state = mainMenu
+			m.state = fmMenu
 		} else {
 			m.emails = msg.emails
 			m.emailClient = msg.client
@@ -189,15 +196,91 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q":
 		return m, tea.Quit
-	case "up", "k":
-		if m.cursor > 0 {
-			m.cursor--
-		}
-	case "down", "j":
+	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
 			m.cursor++
 		}
-	case "enter", " ":
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "l": // Select/Enter
+		switch m.cursor {
+		case 0: // YT
+			m.state = ytMenu
+			m.cursor = 0
+			m.choices = []string{"Video Manager", "Analytics", "Settings", "Back"}
+			m.message = ""
+		case 1: // FM
+			m.state = fmMenu
+			m.cursor = 0
+			// Set FM menu based on account status
+			if !m.config.HasAccount() {
+				m.choices = []string{"Setup Account", "Back"}
+			} else {
+				m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings", "Back"}
+			}
+			m.message = ""
+		case 2: // dev
+			m.state = devMenu
+			m.cursor = 0
+			m.choices = []string{"Docker Tools", "Deploy Scripts", "System Utils", "Code Gen", "Back"}
+			m.message = ""
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateYTMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back
+		m.state = mainMenu
+		m.cursor = 0
+		m.choices = []string{"YT (YouTube)", "FM (FastMail)", "dev (Development)"}
+	case "j": // Move down
+		if m.cursor < len(m.choices)-1 {
+			m.cursor++
+		}
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "l": // Select
+		switch m.cursor {
+		case 0: // Video Manager
+			m.message = infoStyle.Render("Video Manager - Coming Soon!")
+		case 1: // Analytics
+			m.message = infoStyle.Render("Analytics Dashboard - Coming Soon!")
+		case 2: // Settings
+			m.message = infoStyle.Render("YouTube Settings - Coming Soon!")
+		case 3: // Back
+			m.state = mainMenu
+			m.cursor = 0
+			m.choices = []string{"YT (YouTube)", "FM (FastMail)", "dev (Development)"}
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateFMMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back
+		m.state = mainMenu
+		m.cursor = 0
+		m.choices = []string{"YT (YouTube)", "FM (FastMail)", "dev (Development)"}
+	case "j": // Move down
+		if m.cursor < len(m.choices)-1 {
+			m.cursor++
+		}
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "l": // Select
 		if !m.config.HasAccount() {
 			switch m.cursor {
 			case 0: // Setup Account
@@ -205,8 +288,10 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.input = ""
 				m.tempAccount = FastmailAccount{}
 				m.message = ""
-			case 1: // Exit
-				return m, tea.Quit
+			case 1: // Back
+				m.state = mainMenu
+				m.cursor = 0
+				m.choices = []string{"YT (YouTube)", "FM (FastMail)", "dev (Development)"}
 			}
 		} else {
 			switch m.cursor {
@@ -217,14 +302,51 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.message = ""
 				return m, m.fetchEmails()
 			case 1: // Compose Email
-				m.message = infoStyle.Render("✉️ Email composing feature coming soon!")
+				m.message = infoStyle.Render("Email composing feature coming soon!")
 			case 2: // Account Settings
 				m.state = viewAccount
 				m.cursor = 0
 				m.message = ""
-			case 3: // Exit
-				return m, tea.Quit
+			case 3: // Back
+				m.state = mainMenu
+				m.cursor = 0
+				m.choices = []string{"YT (YouTube)", "FM (FastMail)", "dev (Development)"}
 			}
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateDevMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back
+		m.state = mainMenu
+		m.cursor = 0
+		m.choices = []string{"YT (YouTube)", "FM (FastMail)", "dev (Development)"}
+	case "j": // Move down
+		if m.cursor < len(m.choices)-1 {
+			m.cursor++
+		}
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "l": // Select
+		switch m.cursor {
+		case 0: // Docker Tools
+			m.message = infoStyle.Render("Docker Management Tools - Coming Soon!")
+		case 1: // Deploy Scripts
+			m.message = infoStyle.Render("Deployment Scripts - Coming Soon!")
+		case 2: // System Utils
+			m.message = infoStyle.Render("System Utilities - Coming Soon!")
+		case 3: // Code Gen
+			m.message = infoStyle.Render("Code Generation Tools - Coming Soon!")
+		case 4: // Back
+			m.state = mainMenu
+			m.cursor = 0
+			m.choices = []string{"YT (YouTube)", "FM (FastMail)", "dev (Development)"}
 		}
 	}
 	return m, nil
@@ -256,17 +378,22 @@ func (m model) updateReadEmails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-	case "esc", "q":
-		m.state = mainMenu
+	case "h": // Go back
+		m.state = fmMenu
 		m.cursor = 0
 		m.loading = false
-	case "up", "k":
-		if m.cursor > 0 {
-			m.cursor--
+		if !m.config.HasAccount() {
+			m.choices = []string{"Setup Account", "Back"}
+		} else {
+			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings", "Back"}
 		}
-	case "down", "j":
+	case "j": // Move down
 		if m.cursor < len(m.emails)-1 {
 			m.cursor++
+		}
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
 		}
 	case "r":
 		// Refresh emails
@@ -282,7 +409,7 @@ func (m model) updateViewEmail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-	case "esc", "q":
+	case "h": // Go back
 		m.state = readEmails
 		m.cursor = 0
 	}
@@ -293,8 +420,8 @@ func (m model) updateAddAccount(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-	case "esc":
-		m.state = mainMenu
+	case "h": // Go back
+		m.state = fmMenu
 		m.cursor = 0
 	}
 	return m, nil
@@ -304,10 +431,15 @@ func (m model) updateViewAccount(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-	case "esc", "q":
-		m.state = mainMenu
+	case "h": // Go back
+		m.state = fmMenu
 		m.cursor = 0
-	case "enter", " ":
+		if !m.config.HasAccount() {
+			m.choices = []string{"Setup Account", "Back"}
+		} else {
+			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings", "Back"}
+		}
+	case "l": // Select/Edit
 		// Start editing account
 		if m.config.HasAccount() {
 			m.tempAccount = *m.config.MainAccount
@@ -323,10 +455,15 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-	case "esc":
-		m.state = mainMenu
+	case "h": // Go back instead of esc
+		m.state = fmMenu
 		m.cursor = 0
 		m.input = ""
+		if !m.config.HasAccount() {
+			m.choices = []string{"Setup Account", "Back"}
+		} else {
+			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings", "Back"}
+		}
 	case "enter":
 		switch m.state {
 		case inputName:
@@ -366,11 +503,11 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.message = errorStyle.Render(fmt.Sprintf("Error saving account: %v", err))
 			} else {
 				m.message = successStyle.Render("✓ Account saved successfully!")
-				// Update choices to show full menu now that account is set up
-				m.choices = []string{"📧 Read Emails", "✉️  Compose Email (Coming Soon)", "👤 Account Settings", "❌ Exit"}
+				// Update choices to show full FM menu now that account is set up
+				m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings", "Back"}
 			}
 
-			m.state = mainMenu
+			m.state = fmMenu
 			m.cursor = 0
 			m.input = ""
 			m.tempAccount = FastmailAccount{}
@@ -390,8 +527,22 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	var s strings.Builder
 
-	// Title with enhanced styling
-	s.WriteString(titleStyle.Render("📨 Fastmail CLI Manager"))
+	// Dynamic title based on current state
+	var title string
+	switch m.state {
+	case mainMenu:
+		title = "🚀 CLI-X Main Menu"
+	case ytMenu:
+		title = "📺 YouTube Manager"
+	case fmMenu:
+		title = "📧 FastMail Manager"
+	case devMenu:
+		title = "💻 Development Tools"
+	default:
+		title = "📧 FastMail Manager"
+	}
+
+	s.WriteString(titleStyle.Render(title))
 	s.WriteString("\n")
 
 	if m.message != "" {
@@ -400,8 +551,20 @@ func (m model) View() string {
 	}
 
 	switch m.state {
-	case mainMenu:
-		s.WriteString(headerStyle.Render("🏠 Main Menu"))
+	case mainMenu, ytMenu, fmMenu, devMenu:
+		var headerText string
+		switch m.state {
+		case mainMenu:
+			headerText = "🏠 Select Category"
+		case ytMenu:
+			headerText = "📺 YouTube Tools"
+		case fmMenu:
+			headerText = "📧 FastMail Tools"
+		case devMenu:
+			headerText = "💻 Development Tools"
+		}
+
+		s.WriteString(headerStyle.Render(headerText))
 		s.WriteString("\n")
 
 		for i, choice := range m.choices {
@@ -418,13 +581,15 @@ func (m model) View() string {
 			s.WriteString("\n")
 		}
 
-		if m.config.HasAccount() {
+		// Show account status for FM menu
+		if m.state == fmMenu {
 			s.WriteString("\n")
-			s.WriteString(successStyle.Render(fmt.Sprintf("👤 Current account: %s (%s)",
-				m.config.MainAccount.Name, m.config.MainAccount.Email)))
-		} else {
-			s.WriteString("\n")
-			s.WriteString(errorStyle.Render("⚠️  Please setup your Fastmail account first"))
+			if m.config.HasAccount() {
+				s.WriteString(successStyle.Render(fmt.Sprintf("👤 Current account: %s (%s)",
+					m.config.MainAccount.Name, m.config.MainAccount.Email)))
+			} else {
+				s.WriteString(errorStyle.Render("⚠️  Please setup your FastMail account first"))
+			}
 		}
 
 	case readEmails:
@@ -441,10 +606,10 @@ func (m model) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(infoStyle.Render("Press 'r' to refresh, 'q' to go back"))
+		s.WriteString(infoStyle.Render("Press 'r' to refresh, 'h' to go back"))
 
 	case viewAccount:
-		s.WriteString(headerStyle.Render("👤 Account Settings"))
+		s.WriteString(headerStyle.Render("Account Settings"))
 		s.WriteString("\n")
 
 		if m.config.HasAccount() {
@@ -453,7 +618,7 @@ func (m model) View() string {
 			s.WriteString(fmt.Sprintf("📧 Email: %s\n", account.Email))
 			s.WriteString(fmt.Sprintf("🔑 API Key: %s...\n", account.APIKey[:8]))
 			s.WriteString("\n")
-			s.WriteString(infoStyle.Render("Press Enter to edit account details"))
+			s.WriteString(infoStyle.Render("Press 'l' to edit account details, 'h' to go back"))
 		}
 
 	case inputName:
@@ -484,7 +649,7 @@ func (m model) View() string {
 	}
 
 	s.WriteString("\n\n")
-	s.WriteString(infoStyle.Render("Press 'Ctrl+C' to quit • Use ↑↓ or j/k to navigate • Enter to select"))
+	// Help text removed for cleaner design
 	return s.String()
 }
 
