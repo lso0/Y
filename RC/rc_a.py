@@ -10,12 +10,20 @@ import fcntl
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Set up logging
+# Set up logging with configurable level
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Enable urllib3 debugging if debug level is set
+if LOG_LEVEL == 'DEBUG':
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.DEBUG)
+    logger.debug("Debug logging enabled - HTTP requests will be verbose")
 
 # Directory paths
 DB_DIR = "db"
@@ -180,29 +188,75 @@ class RevenueCatAutomation:
         try:
             # First, get the login page to get any initial cookies
             login_url = "https://app.revenuecat.com/login"
-            self.session.get(login_url)
+            logger.debug(f"Getting login page: {login_url}")
+            page_response = self.session.get(login_url)
+            logger.debug(f"Login page response status: {page_response.status_code}")
             
-            # Perform login
+            # Prepare login request
             login_data = {
                 "email": email,
                 "password": password
             }
+            login_api_url = f"{self.base_url}/v1/developers/login"
             
+            logger.info(f"Attempting login for account {self.account_id}")
+            logger.debug(f"Login URL: {login_api_url}")
+            logger.debug(f"Login email: {email}")
+            logger.debug(f"Request headers: {self.headers}")
+            logger.debug(f"Session cookies before login: {dict(self.session.cookies)}")
+            
+            # Perform login
             response = self.session.post(
-                f"{self.base_url}/v1/developers/login",
+                login_api_url,
                 json=login_data,
                 headers=self.headers
             )
             
+            logger.debug(f"Login response status: {response.status_code}")
+            logger.debug(f"Login response headers: {dict(response.headers)}")
+            logger.debug(f"Session cookies after login: {dict(self.session.cookies)}")
+            
             if response.status_code == 200:
-                logger.info("Login successful")
+                logger.info(f"Login successful for account {self.account_id}")
+                try:
+                    response_json = response.json()
+                    logger.debug(f"Login response JSON: {response_json}")
+                except:
+                    logger.debug("Login response is not JSON format")
                 return True
             else:
-                logger.error(f"Login failed with status code: {response.status_code}")
+                logger.error(f"Login failed for account {self.account_id} with status code: {response.status_code}")
+                
+                # Log response content for debugging
+                try:
+                    response_text = response.text
+                    logger.error(f"Response body: {response_text}")
+                    
+                    # Try to parse as JSON for better formatting
+                    try:
+                        response_json = response.json()
+                        logger.error(f"Response JSON: {json.dumps(response_json, indent=2)}")
+                    except:
+                        logger.error(f"Response text (non-JSON): {response_text}")
+                        
+                except Exception as content_error:
+                    logger.error(f"Could not read response content: {str(content_error)}")
+                
+                # Log additional debugging info for 403 errors
+                if response.status_code == 403:
+                    logger.error("🔒 HTTP 403 Forbidden - Possible causes:")
+                    logger.error("   1. Invalid credentials (check RC_E_* and RC_P_* environment variables)")
+                    logger.error("   2. Account locked or suspended")
+                    logger.error("   3. Rate limiting or IP blocking")
+                    logger.error("   4. API endpoint changed or deprecated")
+                    logger.error("   5. Required headers or authentication method changed")
+                    logger.error(f"   6. Email being used: {email}")
+                    
                 return False
                 
         except Exception as e:
-            logger.error(f"Login error: {str(e)}")
+            logger.error(f"Login error for account {self.account_id}: {str(e)}")
+            logger.exception("Full login exception details:")
             return False
 
     def create_project(self, project_name):
@@ -212,24 +266,55 @@ class RevenueCatAutomation:
             url = f"{self.base_url}/internal/v1/developers/me/projects"
             data = {"name": project_name}
             
+            logger.debug(f"Creating project '{project_name}' for account {self.account_id}")
+            logger.debug(f"Project creation URL: {url}")
+            logger.debug(f"Project data: {data}")
+            logger.debug(f"Request headers: {self.headers}")
+            
             response = self.session.post(
                 url,
                 json=data,
                 headers=self.headers
             )
             
+            logger.debug(f"Project creation response status: {response.status_code}")
+            logger.debug(f"Project creation response headers: {dict(response.headers)}")
+            
             if response.status_code in [200, 201]:
                 project_data = response.json()
-                logger.info(f"Successfully created project: {project_name}")
-                logger.info(f"Project details: {project_data}")
+                logger.info(f"Successfully created project: {project_name} for account {self.account_id}")
+                logger.debug(f"Project details: {project_data}")
                 return project_data
             else:
-                logger.error(f"Project creation failed with status code: {response.status_code}")
-                logger.error(f"Response: {response.text}")
+                logger.error(f"Project creation failed for '{project_name}' (account {self.account_id}) with status code: {response.status_code}")
+                
+                # Log detailed error response
+                try:
+                    response_text = response.text
+                    logger.error(f"Response body: {response_text}")
+                    
+                    try:
+                        response_json = response.json()
+                        logger.error(f"Response JSON: {json.dumps(response_json, indent=2)}")
+                    except:
+                        logger.error(f"Response text (non-JSON): {response_text}")
+                        
+                except Exception as content_error:
+                    logger.error(f"Could not read response content: {str(content_error)}")
+                
+                # Additional context for common errors
+                if response.status_code == 403:
+                    logger.error("🔒 Project creation forbidden - check if session is still valid")
+                elif response.status_code == 409:
+                    logger.error("🔄 Project name might already exist")
+                elif response.status_code == 422:
+                    logger.error("📝 Invalid project data - check project name format")
+                    
                 return None
                 
         except Exception as e:
-            logger.error(f"Project creation error: {str(e)}")
+            logger.error(f"Project creation error for '{project_name}' (account {self.account_id}): {str(e)}")
+            logger.exception("Full project creation exception details:")
             return None
 
     def create_api_key(self, project_id, label="APIKEYNAME1"):
@@ -262,25 +347,57 @@ class RevenueCatAutomation:
                 'Referer': 'https://app.revenuecat.com/'
             })
             
+            logger.debug(f"Creating API key '{label}' for project {project_id} (account {self.account_id})")
+            logger.debug(f"API key creation URL: {url}")
+            logger.debug(f"API key data: {json.dumps(data, indent=2)}")
+            logger.debug(f"Request headers: {headers}")
+            
             response = self.session.post(
                 url,
                 json=data,
                 headers=headers
             )
             
+            logger.debug(f"API key creation response status: {response.status_code}")
+            logger.debug(f"API key creation response headers: {dict(response.headers)}")
+            
             if response.status_code in [200, 201]:
                 api_key_data = response.json()
-                logger.info(f"Successfully created API key: {label}")
+                logger.info(f"Successfully created API key: {label} for project {project_id} (account {self.account_id})")
                 logger.info(f"API Key: {api_key_data.get('key')}")
-                logger.info(f"API Key ID: {api_key_data.get('id')}")
+                logger.debug(f"API Key ID: {api_key_data.get('id')}")
+                logger.debug(f"Full API key response: {api_key_data}")
                 return api_key_data
             else:
-                logger.error(f"API key creation failed with status code: {response.status_code}")
-                logger.error(f"Response: {response.text}")
+                logger.error(f"API key creation failed for project {project_id} (account {self.account_id}) with status code: {response.status_code}")
+                
+                # Log detailed error response
+                try:
+                    response_text = response.text
+                    logger.error(f"Response body: {response_text}")
+                    
+                    try:
+                        response_json = response.json()
+                        logger.error(f"Response JSON: {json.dumps(response_json, indent=2)}")
+                    except:
+                        logger.error(f"Response text (non-JSON): {response_text}")
+                        
+                except Exception as content_error:
+                    logger.error(f"Could not read response content: {str(content_error)}")
+                
+                # Additional context for common errors
+                if response.status_code == 403:
+                    logger.error("🔒 API key creation forbidden - check if session is still valid")
+                elif response.status_code == 404:
+                    logger.error("🔍 Project not found - check if project ID is correct")
+                elif response.status_code == 422:
+                    logger.error("📝 Invalid API key data - check permissions or label format")
+                    
                 return None
                 
         except Exception as e:
-            logger.error(f"API key creation error: {str(e)}")
+            logger.error(f"API key creation error for project {project_id} (account {self.account_id}): {str(e)}")
+            logger.exception("Full API key creation exception details:")
             return None
 
     def close(self):
@@ -410,7 +527,19 @@ def main():
                        help='Action to perform (c_p: create project, d_p: delete project, l_p: list projects)')
     parser.add_argument('--projects', '-p', nargs='+', default=[],
                        help='Name(s) of the project(s)')
+    parser.add_argument('--debug', '-d', action='store_true',
+                       help='Enable debug logging for verbose HTTP request/response details')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                       help='Enable verbose logging (same as --debug)')
     args = parser.parse_args()
+    
+    # Set log level based on arguments or environment variable
+    if args.debug or args.verbose or os.getenv('LOG_LEVEL', '').upper() == 'DEBUG':
+        logging.getLogger().setLevel(logging.DEBUG)
+        # Enable urllib3 debug logging for HTTP details
+        logging.getLogger("urllib3.connectionpool").setLevel(logging.DEBUG)
+        logging.getLogger("requests.packages.urllib3").setLevel(logging.DEBUG)
+        logger.info("🐛 Debug logging enabled - HTTP requests will be verbose")
 
     # Validate arguments
     if args.action in ['c_p', 'd_p'] and not args.projects:

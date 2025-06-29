@@ -105,6 +105,21 @@ setup_environment() {
 run_rc_automation() {
     print_info "Running RC automation with arguments: $*"
     
+    # Check for debug/verbose flags in arguments
+    DEBUG_MODE=false
+    for arg in "$@"; do
+        if [[ "$arg" == "--debug" || "$arg" == "-d" || "$arg" == "--verbose" || "$arg" == "-v" ]]; then
+            DEBUG_MODE=true
+            break
+        fi
+    done
+    
+    # Set LOG_LEVEL environment variable if debug mode is enabled
+    if [ "$DEBUG_MODE" = true ]; then
+        export LOG_LEVEL=DEBUG
+        print_info "🐛 Debug mode enabled - verbose HTTP logging will be shown"
+    fi
+    
     # Ensure environment is set up
     if [ ! -f "/app/RC/.env" ]; then
         print_warning "Environment not set up, running setup first..."
@@ -140,19 +155,31 @@ show_help() {
     echo "  shell                   Open interactive shell in container"
     echo "  help                    Show this help message"
     echo ""
+    echo -e "${GREEN}RC Automation Arguments:${NC}"
+    echo "  -a, --accounts A1 A2    Account identifiers (required)"
+    echo "  -x, --action ACTION     Action: c_p (create), d_p (delete), l_p (list)"
+    echo "  -p, --projects P1 P2    Project names (required for create/delete)"
+    echo "  -d, --debug             Enable verbose debug logging"
+    echo "  -v, --verbose           Enable verbose debug logging (same as --debug)"
+    echo ""
     echo -e "${GREEN}Examples:${NC}"
     echo "  docker-compose run --rm rc-automation setup"
-    echo "  docker-compose run --rm rc-automation run"
-    echo "  docker-compose run --rm rc-automation run --some-arg value"
+    echo "  docker-compose run --rm rc-automation run -a A1 A2 -x c_p -p proj1 proj2"
+    echo "  docker-compose run --rm rc-automation run -a A1 -x c_p -p proj1 --debug"
+    echo "  docker-compose run --rm rc-automation run -a A1 -x l_p"
     echo "  docker-compose run --rm rc-automation shell"
     echo ""
     echo -e "${GREEN}Environment Variables:${NC}"
     echo "  INFISICAL_TOKEN         Your Infisical authentication token"
+    echo "  RC_E_1, RC_P_1          RevenueCat account 1 email and password"
+    echo "  RC_E_2, RC_P_2          RevenueCat account 2 email and password"
+    echo "  LOG_LEVEL               Set to DEBUG for verbose logging"
     echo "  TAILSCALE_IP           Tailscale IP address (optional)"
     echo "  TAILSCALE_ENABLED      Enable Tailscale features (optional)"
     echo "  TAILSCALE_HOSTNAME     Tailscale hostname (optional)"
     echo ""
-    echo -e "${YELLOW}Note:${NC} Make sure to set your INFISICAL_TOKEN in .env file"
+    echo -e "${YELLOW}Debug Mode:${NC} Use --debug or --verbose for detailed HTTP logging"
+    echo -e "${YELLOW}Note:${NC} Make sure to set your INFISICAL_TOKEN and RC_E_*/RC_P_* in .env file"
 }
 
 # Function to open interactive shell
