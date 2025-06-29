@@ -43,6 +43,11 @@ type model struct {
 	selectedEmail *fm.Email
 	emailClient   *fm.EmailClient
 	loading       bool
+	// Memory system for cursor positions
+	mainMenuCursor int
+	ytMenuCursor   int
+	fmMenuCursor   int
+	devMenuCursor  int
 }
 
 var (
@@ -62,8 +67,8 @@ var (
 			Bold(true).
 			Foreground(textColor).
 			Background(secondaryColor).
-			Padding(1, 2).
-			Margin(0, 0, 2, 0).
+			Padding(0, 2).
+			Margin(0, 0, 1, 0).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor).
 			Align(lipgloss.Center)
@@ -72,7 +77,7 @@ var (
 			Bold(true).
 			Foreground(accentColor).
 			Padding(0, 1).
-			Margin(1, 0, 2, 0)
+			Margin(0, 0, 1, 0)
 
 	menuStyle = lipgloss.NewStyle().
 			Foreground(textColor).
@@ -225,26 +230,41 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor--
 		}
 	case "l": // Select/Enter
+		// Save current main menu position
+		m.mainMenuCursor = m.cursor
+
 		switch m.cursor {
 		case 0: // YT
 			m.state = ytMenu
-			m.cursor = 0
 			m.choices = []string{"Video Manager", "Analytics", "Settings"}
+			// Ensure cursor is within bounds
+			if m.ytMenuCursor >= len(m.choices) {
+				m.ytMenuCursor = 0
+			}
+			m.cursor = m.ytMenuCursor
 			m.message = ""
 		case 1: // FM
 			m.state = fmMenu
-			m.cursor = 0
 			// Set FM menu based on account status
 			if !m.config.HasAccount() {
 				m.choices = []string{"Setup Account"}
 			} else {
 				m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings"}
 			}
+			// Ensure cursor is within bounds
+			if m.fmMenuCursor >= len(m.choices) {
+				m.fmMenuCursor = 0
+			}
+			m.cursor = m.fmMenuCursor
 			m.message = ""
 		case 2: // dev
 			m.state = devMenu
-			m.cursor = 0
 			m.choices = []string{"Docker Tools", "Deploy Scripts", "System Utils", "Code Gen"}
+			// Ensure cursor is within bounds
+			if m.devMenuCursor >= len(m.choices) {
+				m.devMenuCursor = 0
+			}
+			m.cursor = m.devMenuCursor
 			m.message = ""
 		}
 	}
@@ -257,7 +277,7 @@ func (m model) updateYTMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "h": // Go back
 		m.state = mainMenu
-		m.cursor = 0
+		m.cursor = m.mainMenuCursor
 		m.choices = []string{"YT", "FM", "dev"}
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
@@ -268,6 +288,9 @@ func (m model) updateYTMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor--
 		}
 	case "l": // Select
+		// Save current YT menu position
+		m.ytMenuCursor = m.cursor
+
 		switch m.cursor {
 		case 0: // Video Manager
 			m.message = infoStyle.Render("Video Manager - Coming Soon!")
@@ -286,7 +309,7 @@ func (m model) updateFMMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "h": // Go back
 		m.state = mainMenu
-		m.cursor = 0
+		m.cursor = m.mainMenuCursor
 		m.choices = []string{"YT", "FM", "dev"}
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
@@ -297,6 +320,9 @@ func (m model) updateFMMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor--
 		}
 	case "l": // Select
+		// Save current FM menu position
+		m.fmMenuCursor = m.cursor
+
 		if !m.config.HasAccount() {
 			switch m.cursor {
 			case 0: // Setup Account
@@ -331,7 +357,7 @@ func (m model) updateDevMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "h": // Go back
 		m.state = mainMenu
-		m.cursor = 0
+		m.cursor = m.mainMenuCursor
 		m.choices = []string{"YT", "FM", "dev"}
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
@@ -342,6 +368,9 @@ func (m model) updateDevMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor--
 		}
 	case "l": // Select
+		// Save current dev menu position
+		m.devMenuCursor = m.cursor
+
 		switch m.cursor {
 		case 0: // Docker Tools
 			m.message = infoStyle.Render("Docker Management Tools - Coming Soon!")
@@ -383,8 +412,9 @@ func (m model) updateReadEmails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "h": // Go back
+		// Save current email reading position and return to FM menu
 		m.state = fmMenu
-		m.cursor = 0
+		m.cursor = m.fmMenuCursor
 		m.loading = false
 		if !m.config.HasAccount() {
 			m.choices = []string{"Setup Account"}
@@ -426,7 +456,7 @@ func (m model) updateAddAccount(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "h": // Go back
 		m.state = fmMenu
-		m.cursor = 0
+		m.cursor = m.mainMenuCursor
 	}
 	return m, nil
 }
@@ -437,7 +467,7 @@ func (m model) updateViewAccount(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "h": // Go back
 		m.state = fmMenu
-		m.cursor = 0
+		m.cursor = m.mainMenuCursor
 		if !m.config.HasAccount() {
 			m.choices = []string{"Setup Account"}
 		} else {
@@ -461,7 +491,7 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "h": // Go back instead of esc
 		m.state = fmMenu
-		m.cursor = 0
+		m.cursor = m.mainMenuCursor
 		m.input = ""
 		if !m.config.HasAccount() {
 			m.choices = []string{"Setup Account"}
@@ -512,7 +542,7 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 
 			m.state = fmMenu
-			m.cursor = 0
+			m.cursor = m.mainMenuCursor
 			m.input = ""
 			m.tempAccount = FastmailAccount{}
 		}
@@ -583,15 +613,15 @@ func (m model) View() string {
 			s.WriteString("\n")
 		}
 
-		// Show account status for FM menu
+		// Show account status for FM menu (more compact)
 		if m.state == fmMenu {
-			s.WriteString("\n")
 			if m.config.HasAccount() {
-				s.WriteString(successStyle.Render(fmt.Sprintf("👤 Current account: %s (%s)",
+				s.WriteString(successStyle.Render(fmt.Sprintf("Account: %s (%s)",
 					m.config.MainAccount.Name, m.config.MainAccount.Email)))
 			} else {
 				s.WriteString(errorStyle.Render("⚠️  Please setup your FastMail account first"))
 			}
+			s.WriteString("\n")
 		}
 
 	case readEmails:
@@ -650,7 +680,7 @@ func (m model) View() string {
 		s.WriteString(infoStyle.Render("💡 Get your API key from: https://app.fastmail.com/settings/security/tokens/new"))
 	}
 
-	s.WriteString("\n\n")
+	s.WriteString("\n")
 	// Help text removed for cleaner design
 	return s.String()
 }
