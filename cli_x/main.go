@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"cli_x/fm"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -37,9 +39,9 @@ type model struct {
 	tempAccount   FastmailAccount
 	message       string
 	err           error
-	emails        []EmailSummary
-	selectedEmail *Email
-	emailClient   *EmailClient
+	emails        []fm.EmailSummary
+	selectedEmail *fm.Email
+	emailClient   *fm.EmailClient
 	loading       bool
 }
 
@@ -354,7 +356,7 @@ func (m model) updateDevMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) fetchEmails() tea.Cmd {
 	return func() tea.Msg {
-		client, err := NewEmailClient(m.config.MainAccount.APIKey)
+		client, err := fm.NewEmailClient(m.config.MainAccount.APIKey)
 		if err != nil {
 			return emailFetchedMsg{err: err}
 		}
@@ -369,8 +371,8 @@ func (m model) fetchEmails() tea.Cmd {
 }
 
 type emailFetchedMsg struct {
-	emails []EmailSummary
-	client *EmailClient
+	emails []fm.EmailSummary
+	client *fm.EmailClient
 	err    error
 }
 
