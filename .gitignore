@@ -11,4 +11,3 @@ ENV/ a/downloaded_files/
 
 # Sensitive RevenueCat data
 RC/db/*.json
-.infisical.json
