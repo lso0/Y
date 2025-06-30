@@ -16,9 +16,11 @@ type state int
 
 const (
 	mainMenu state = iota
-	ytMenu
 	fmMenu
 	devMenu
+	financeMenu
+	knowledgeMenu
+	ytMenu
 	addAccount
 	viewAccount
 	readEmails
@@ -44,10 +46,12 @@ type model struct {
 	emailClient   *fm.EmailClient
 	loading       bool
 	// Memory system for cursor positions
-	mainMenuCursor int
-	ytMenuCursor   int
-	fmMenuCursor   int
-	devMenuCursor  int
+	mainMenuCursor      int
+	fmMenuCursor        int
+	devMenuCursor       int
+	financeMenuCursor   int
+	knowledgeMenuCursor int
+	ytMenuCursor        int
 }
 
 var (
@@ -164,8 +168,8 @@ func initialModel() model {
 		log.Fatal(err)
 	}
 
-	// Main menu with three categories
-	choices := []string{"YT", "FM", "dev"}
+	// Main menu with four categories
+	choices := []string{"FM", "dev", "Finance", "Knowledge"}
 
 	return model{
 		config:   config,
@@ -185,12 +189,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.state {
 		case mainMenu:
 			return m.updateMainMenu(msg)
-		case ytMenu:
-			return m.updateYTMenu(msg)
 		case fmMenu:
 			return m.updateFMMenu(msg)
 		case devMenu:
 			return m.updateDevMenu(msg)
+		case financeMenu:
+			return m.updateFinanceMenu(msg)
+		case knowledgeMenu:
+			return m.updateKnowledgeMenu(msg)
+		case ytMenu:
+			return m.updateYTMenu(msg)
 		case addAccount:
 			return m.updateAddAccount(msg)
 		case viewAccount:
@@ -234,16 +242,7 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mainMenuCursor = m.cursor
 
 		switch m.cursor {
-		case 0: // YT
-			m.state = ytMenu
-			m.choices = []string{"Video Manager", "Analytics", "Settings"}
-			// Ensure cursor is within bounds
-			if m.ytMenuCursor >= len(m.choices) {
-				m.ytMenuCursor = 0
-			}
-			m.cursor = m.ytMenuCursor
-			m.message = ""
-		case 1: // FM
+		case 0: // FM
 			m.state = fmMenu
 			// Set FM menu based on account status
 			if !m.config.HasAccount() {
@@ -257,7 +256,7 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.cursor = m.fmMenuCursor
 			m.message = ""
-		case 2: // dev
+		case 1: // dev
 			m.state = devMenu
 			m.choices = []string{"Docker Tools", "Deploy Scripts", "System Utils", "Code Gen"}
 			// Ensure cursor is within bounds
@@ -265,6 +264,24 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.devMenuCursor = 0
 			}
 			m.cursor = m.devMenuCursor
+			m.message = ""
+		case 2: // Finance
+			m.state = financeMenu
+			m.choices = []string{"Budget Tracker", "Expense Manager", "Investment Portfolio", "Reports"}
+			// Ensure cursor is within bounds
+			if m.financeMenuCursor >= len(m.choices) {
+				m.financeMenuCursor = 0
+			}
+			m.cursor = m.financeMenuCursor
+			m.message = ""
+		case 3: // Knowledge
+			m.state = knowledgeMenu
+			m.choices = []string{"YT", "Medium"}
+			// Ensure cursor is within bounds
+			if m.knowledgeMenuCursor >= len(m.choices) {
+				m.knowledgeMenuCursor = 0
+			}
+			m.cursor = m.knowledgeMenuCursor
 			m.message = ""
 		}
 	}
@@ -276,9 +293,9 @@ func (m model) updateYTMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "h": // Go back
-		m.state = mainMenu
-		m.cursor = m.mainMenuCursor
-		m.choices = []string{"YT", "FM", "dev"}
+		m.state = knowledgeMenu
+		m.cursor = m.knowledgeMenuCursor
+		m.choices = []string{"YT", "Medium"}
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
 			m.cursor++
@@ -310,7 +327,7 @@ func (m model) updateFMMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = mainMenu
 		m.cursor = m.mainMenuCursor
-		m.choices = []string{"YT", "FM", "dev"}
+		m.choices = []string{"FM", "dev", "Finance", "Knowledge"}
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
 			m.cursor++
@@ -358,7 +375,7 @@ func (m model) updateDevMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = mainMenu
 		m.cursor = m.mainMenuCursor
-		m.choices = []string{"YT", "FM", "dev"}
+		m.choices = []string{"FM", "dev", "Finance", "Knowledge"}
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
 			m.cursor++
@@ -380,6 +397,77 @@ func (m model) updateDevMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.message = infoStyle.Render("System Utilities - Coming Soon!")
 		case 3: // Code Gen
 			m.message = infoStyle.Render("Code Generation Tools - Coming Soon!")
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateFinanceMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back
+		m.state = mainMenu
+		m.cursor = m.mainMenuCursor
+		m.choices = []string{"FM", "dev", "Finance", "Knowledge"}
+	case "j": // Move down
+		if m.cursor < len(m.choices)-1 {
+			m.cursor++
+		}
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "l": // Select
+		// Save current finance menu position
+		m.financeMenuCursor = m.cursor
+
+		switch m.cursor {
+		case 0: // Budget Tracker
+			m.message = infoStyle.Render("Budget Tracking - Coming Soon!")
+		case 1: // Expense Manager
+			m.message = infoStyle.Render("Expense Management - Coming Soon!")
+		case 2: // Investment Portfolio
+			m.message = infoStyle.Render("Investment Portfolio - Coming Soon!")
+		case 3: // Reports
+			m.message = infoStyle.Render("Financial Reports - Coming Soon!")
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateKnowledgeMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back
+		m.state = mainMenu
+		m.cursor = m.mainMenuCursor
+		m.choices = []string{"FM", "dev", "Finance", "Knowledge"}
+	case "j": // Move down
+		if m.cursor < len(m.choices)-1 {
+			m.cursor++
+		}
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "l": // Select
+		// Save current knowledge menu position
+		m.knowledgeMenuCursor = m.cursor
+
+		switch m.cursor {
+		case 0: // YT
+			m.state = ytMenu
+			m.choices = []string{"Video Manager", "Analytics", "Settings"}
+			// Ensure cursor is within bounds
+			if m.ytMenuCursor >= len(m.choices) {
+				m.ytMenuCursor = 0
+			}
+			m.cursor = m.ytMenuCursor
+			m.message = ""
+		case 1: // Medium
+			m.message = infoStyle.Render("Medium Integration - Coming Soon!")
 		}
 	}
 	return m, nil
@@ -566,12 +654,16 @@ func (m model) View() string {
 	switch m.state {
 	case mainMenu:
 		title = "🚀 CLI-X Main Menu"
-	case ytMenu:
-		title = "📺 YouTube Manager"
 	case fmMenu:
 		title = "📧 FastMail Manager"
 	case devMenu:
 		title = "💻 Development Tools"
+	case financeMenu:
+		title = "💰 Finance Manager"
+	case knowledgeMenu:
+		title = "🧠 Knowledge Base"
+	case ytMenu:
+		title = "📺 YouTube Manager"
 	default:
 		title = "📧 FastMail Manager"
 	}
@@ -585,17 +677,21 @@ func (m model) View() string {
 	}
 
 	switch m.state {
-	case mainMenu, ytMenu, fmMenu, devMenu:
+	case mainMenu, fmMenu, devMenu, financeMenu, knowledgeMenu, ytMenu:
 		var headerText string
 		switch m.state {
 		case mainMenu:
 			headerText = "🏠 Select Category"
-		case ytMenu:
-			headerText = "📺 YouTube Tools"
 		case fmMenu:
 			headerText = "📧 FastMail Tools"
 		case devMenu:
 			headerText = "💻 Development Tools"
+		case financeMenu:
+			headerText = "💰 Finance Tools"
+		case knowledgeMenu:
+			headerText = "🧠 Knowledge Base"
+		case ytMenu:
+			headerText = "📺 YouTube Tools"
 		}
 
 		s.WriteString(headerStyle.Render(headerText))
