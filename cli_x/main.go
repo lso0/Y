@@ -702,7 +702,7 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = financeMenu
 		m.cursor = m.financeMenuCursor
-		m.choices = []string{"View Services", "Add Service", "Summary Report", "Categories"}
+		m.choices = []string{"View Services", "Add Service", "Categories"}
 	case "j": // Move down
 		if m.cursor < len(m.services)-1 {
 			m.cursor++
@@ -1096,14 +1096,44 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		return s.String()
 	}
 
+	// Calculate totals for summary
 	totalMonthly := 0.0
 	totalYearly := 0.0
-
-	for i, service := range m.services {
+	for _, service := range m.services {
 		if service.Status == 1 {
 			totalMonthly += service.GetMonthlyCost()
 			totalYearly += service.GetYearlyCost()
 		}
+	}
+
+	// Scrolling logic - show max 12 services at a time
+	maxVisible := 12
+	start := 0
+	end := len(m.services)
+
+	if len(m.services) > maxVisible {
+		// Calculate scroll window
+		if m.cursor < maxVisible/2 {
+			start = 0
+			end = maxVisible
+		} else if m.cursor >= len(m.services)-maxVisible/2 {
+			start = len(m.services) - maxVisible
+			end = len(m.services)
+		} else {
+			start = m.cursor - maxVisible/2
+			end = m.cursor + maxVisible/2
+		}
+	}
+
+	// Show scroll indicator at top
+	if start > 0 {
+		s.WriteString(infoStyle.Render(fmt.Sprintf("↑ %d more services above...", start)))
+		s.WriteString("\n")
+	}
+
+	// Display visible services
+	for i := start; i < end; i++ {
+		service := m.services[i]
 
 		number := fmt.Sprintf("%d. ", i+1)
 		name := service.Name
@@ -1146,11 +1176,20 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		s.WriteString("\n")
 	}
 
+	// Show scroll indicator at bottom
+	if end < len(m.services) {
+		s.WriteString(infoStyle.Render(fmt.Sprintf("↓ %d more services below...", len(m.services)-end)))
+		s.WriteString("\n")
+	}
+
+	s.WriteString("\n")
+	// Show current position and total
+	s.WriteString(infoStyle.Render(fmt.Sprintf("Service %d of %d", m.cursor+1, len(m.services))))
 	s.WriteString("\n")
 	s.WriteString(successStyle.Render(fmt.Sprintf("💰 Total: %.2f PLN/month (%.2f PLN/year)",
 		totalMonthly, totalYearly)))
 	s.WriteString("\n")
-	s.WriteString(infoStyle.Render("Press 'l' to view, 'e' to edit, 'd' to delete, 'h' to go back"))
+	s.WriteString(infoStyle.Render("Press 'j/k' to navigate, 'l' to view, 'e' to edit, 'd' to delete, 'h' to go back"))
 	s.WriteString("\n")
 	return s.String()
 }
