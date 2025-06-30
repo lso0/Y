@@ -1112,16 +1112,32 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 	end := len(m.services)
 
 	if len(m.services) > maxVisible {
-		// Calculate scroll window
-		if m.cursor < maxVisible/2 {
+		// Ensure cursor is always visible by adjusting scroll window
+		// If cursor is in the top part, start from beginning
+		if m.cursor < maxVisible-2 {
 			start = 0
 			end = maxVisible
-		} else if m.cursor >= len(m.services)-maxVisible/2 {
+		} else if m.cursor >= len(m.services)-(maxVisible-2) {
+			// If cursor is in the bottom part, show last maxVisible items
 			start = len(m.services) - maxVisible
 			end = len(m.services)
 		} else {
-			start = m.cursor - maxVisible/2
-			end = m.cursor + maxVisible/2
+			// Otherwise, center the cursor in the visible window
+			start = m.cursor - (maxVisible/2 - 1)
+			end = start + maxVisible
+		}
+
+		// Ensure bounds are valid
+		if start < 0 {
+			start = 0
+			end = maxVisible
+		}
+		if end > len(m.services) {
+			end = len(m.services)
+			start = end - maxVisible
+			if start < 0 {
+				start = 0
+			}
 		}
 	}
 
