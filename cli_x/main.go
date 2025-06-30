@@ -914,6 +914,8 @@ func (m model) View() string {
 		title = "💻 Development Tools"
 	case financeMenu:
 		title = "💰 Finance Manager"
+	case financeList, financeView, financeInputName, financeInputTag, financeInputMonthly, financeInputYearly, financeInputRecurrence, financeInputRenewalDate:
+		title = "💰 Finance Manager"
 	case knowledgeMenu:
 		title = "🧠 Knowledge Base"
 	case ytMenu:
@@ -1201,11 +1203,21 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		}
 
 		monthly := service.GetMonthlyCost()
-		status := ""
+
+		// Enhanced status indicators including expiration
+		var status string
 		if service.Status == 1 {
-			status = "🟢"
+			// Check if service is expired
+			renewalDate, err := time.Parse("2006-01-02", service.RenewalDate)
+			if err == nil && renewalDate.Before(time.Now()) {
+				status = "🔴" // Expired - red dot
+			} else if err == nil && renewalDate.Before(time.Now().AddDate(0, 0, 30)) {
+				status = "🟡" // Expiring soon (within 30 days) - yellow dot
+			} else {
+				status = "🟢" // Active and not expiring soon - green dot
+			}
 		} else {
-			status = "🔴"
+			status = "⚫" // Inactive - black dot
 		}
 
 		renewal := service.GetRenewalInfo()
@@ -1219,45 +1231,50 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 			renewal = renewal[:maxRenewalWidth-3] + "..."
 		}
 
-		// Dynamic line formatting based on terminal width
-		var line string
-		if m.terminalWidth > 100 {
-			// Wide terminal - show full information
-			line = fmt.Sprintf("%s%s %-30s %-18s %8.2f PLN/mo %-20s %s",
-				number, status, name, tag, monthly, renewal,
-				func() string {
-					if service.Student {
-						return "🎓"
-					}
-					return ""
-				}())
-		} else if m.terminalWidth < 80 {
-			// Narrow terminal - compact format
-			line = fmt.Sprintf("%s%s %-15s %6.0f PLN %s",
-				number, status, name, monthly,
-				func() string {
-					if service.Student {
-						return "🎓"
-					}
-					return ""
-				}())
-		} else {
-			// Standard terminal - balanced format
-			line = fmt.Sprintf("%s%s %-20s %-12s %7.2f PLN/mo %s %s",
-				number, status, name, tag, monthly, renewal,
-				func() string {
-					if service.Student {
-						return "🎓"
-					}
-					return ""
-				}())
+		// Vertical box layout for better information display
+		studentBadge := ""
+		if service.Student {
+			studentBadge = " 🎓"
 		}
 
-		if m.cursor == i {
-			s.WriteString(selectedStyle.Render(line))
+		// Create service box content
+		var boxContent string
+		if m.terminalWidth > 100 {
+			// Wide terminal - detailed vertical layout
+			boxContent = fmt.Sprintf("%s %s %s%s\n📂 %s | 💳 %.2f PLN/mo | 📅 %s",
+				number, status, name, studentBadge, tag, monthly, renewal)
+		} else if m.terminalWidth < 80 {
+			// Narrow terminal - compact vertical layout
+			boxContent = fmt.Sprintf("%s %s %s%s\n%.0f PLN/mo | %s",
+				number, status, name, studentBadge, monthly, renewal)
 		} else {
-			s.WriteString(menuStyle.Render(line))
+			// Standard terminal - balanced vertical layout
+			boxContent = fmt.Sprintf("%s %s %s%s\n📂 %s | 💳 %.2f PLN/mo | 📅 %s",
+				number, status, name, studentBadge, tag, monthly, renewal)
 		}
+
+		// Create styled box for each service
+		serviceBoxStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			Padding(0, 1).
+			Margin(0, 0, 1, 0).
+			Width(m.terminalWidth - 10) // Adaptive width
+
+		if m.cursor == i {
+			// Selected service - highlight with accent color
+			serviceBoxStyle = serviceBoxStyle.
+				BorderForeground(accentColor).
+				Background(secondaryColor).
+				Bold(true)
+		} else {
+			// Unselected service - standard styling
+			serviceBoxStyle = serviceBoxStyle.
+				BorderForeground(borderColor).
+				Background(backgroundDark)
+		}
+
+		serviceBox := serviceBoxStyle.Render(boxContent)
+		s.WriteString(serviceBox)
 		s.WriteString("\n")
 	}
 
