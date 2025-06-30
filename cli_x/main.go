@@ -930,16 +930,16 @@ func (m model) View() string {
 
 	switch m.state {
 	case mainMenu, fmMenu, devMenu, financeMenu, knowledgeMenu, ytMenu:
-		return m.renderMenuView(s)
+		return m.renderMenuView(&s)
 
 	case financeList:
-		return m.renderFinanceList(s)
+		return m.renderFinanceList(&s)
 
 	case financeView:
-		return m.renderFinanceView(s)
+		return m.renderFinanceView(&s)
 
 	case financeInputName, financeInputTag, financeInputMonthly, financeInputYearly, financeInputRecurrence, financeInputRenewalDate:
-		return m.renderFinanceInput(s)
+		return m.renderFinanceInput(&s)
 
 	case readEmails:
 		s.WriteString(headerStyle.Render("📧 Inbox"))
@@ -1002,7 +1002,7 @@ func (m model) View() string {
 	return s.String()
 }
 
-func (m model) renderMenuView(s strings.Builder) string {
+func (m model) renderMenuView(s *strings.Builder) string {
 	var headerText string
 	switch m.state {
 	case mainMenu:
@@ -1049,7 +1049,7 @@ func (m model) renderMenuView(s strings.Builder) string {
 	return s.String()
 }
 
-func (m model) renderFinanceList(s strings.Builder) string {
+func (m model) renderFinanceList(s *strings.Builder) string {
 	s.WriteString(headerStyle.Render("💰 Finance Services"))
 	s.WriteString("\n")
 
@@ -1120,7 +1120,7 @@ func (m model) renderFinanceList(s strings.Builder) string {
 	return s.String()
 }
 
-func (m model) renderFinanceView(s strings.Builder) string {
+func (m model) renderFinanceView(s *strings.Builder) string {
 	if m.selectedService >= len(m.services) {
 		s.WriteString(errorStyle.Render("Service not found"))
 		s.WriteString("\n")
@@ -1162,7 +1162,7 @@ func (m model) renderFinanceView(s strings.Builder) string {
 	return s.String()
 }
 
-func (m model) renderFinanceInput(s strings.Builder) string {
+func (m model) renderFinanceInput(s *strings.Builder) string {
 	var title, prompt string
 
 	if m.editingIndex >= 0 {
