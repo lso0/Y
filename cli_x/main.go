@@ -91,7 +91,7 @@ var (
 			Foreground(textColor).
 			Background(secondaryColor).
 			Padding(0, 2).
-			Margin(0, 0, 1, 0).
+			Margin(0, 0, 0, 0).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor).
 			Align(lipgloss.Center)
@@ -100,7 +100,7 @@ var (
 			Bold(true).
 			Foreground(accentColor).
 			Padding(0, 1).
-			Margin(0, 0, 1, 0)
+			Margin(0, 0, 0, 0)
 
 	menuStyle = lipgloss.NewStyle().
 			Foreground(textColor).
@@ -915,7 +915,7 @@ func (m model) View() string {
 
 	if m.message != "" {
 		s.WriteString(m.message)
-		s.WriteString("\n\n")
+		s.WriteString("\n")
 	}
 
 	switch m.state {
@@ -1051,30 +1051,30 @@ func (m model) renderMenuView(s *strings.Builder) string {
 				}
 			}
 
-			// Create styled boxes
+			// Create compact styled boxes with minimal padding
 			managerBoxStyle := lipgloss.NewStyle().
 				Foreground(textColor).
 				Background(secondaryColor).
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(accentColor).
 				Bold(true).
-				Padding(0, 2).
-				Margin(0, 1, 0, 0)
+				Padding(0, 1).
+				Margin(0, 0, 0, 0)
 
 			summaryBoxStyle := lipgloss.NewStyle().
 				Foreground(textColor).
 				Background(backgroundDark).
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(accentColor).
-				Padding(0, 2).
-				Margin(0, 1, 0, 0)
+				Padding(0, 1).
+				Margin(0, 0, 0, 0)
 
 			managerBox := managerBoxStyle.Render("💰 Finance Manager")
-			summaryBox := summaryBoxStyle.Render(fmt.Sprintf("💳 %.2f PLN/month  💰 %.2f PLN/year  📊 %d active services",
+			summaryBox := summaryBoxStyle.Render(fmt.Sprintf("💳 %.0f PLN/mo  💰 %.0f PLN/yr  📊 %d active",
 				monthly, yearly, activeServices))
 
-			// Join horizontally with proper spacing
-			horizontalLayout := lipgloss.JoinHorizontal(lipgloss.Top, managerBox, summaryBox)
+			// Join horizontally with minimal spacing
+			horizontalLayout := lipgloss.JoinHorizontal(lipgloss.Top, managerBox, " ", summaryBox)
 			s.WriteString(horizontalLayout)
 		}
 		s.WriteString("\n")
@@ -1106,8 +1106,8 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		}
 	}
 
-	// Scrolling logic - show max 12 services at a time
-	maxVisible := 12
+	// Scrolling logic - show max 8 services at a time for better terminal fit
+	maxVisible := 8
 	start := 0
 	end := len(m.services)
 
@@ -1194,18 +1194,14 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 
 	// Show scroll indicator at bottom
 	if end < len(m.services) {
-		s.WriteString(infoStyle.Render(fmt.Sprintf("↓ %d more services below...", len(m.services)-end)))
+		s.WriteString(infoStyle.Render(fmt.Sprintf("↓ %d more below...", len(m.services)-end)))
 		s.WriteString("\n")
 	}
 
-	s.WriteString("\n")
-	// Show current position and total
-	s.WriteString(infoStyle.Render(fmt.Sprintf("Service %d of %d", m.cursor+1, len(m.services))))
-	s.WriteString("\n")
-	s.WriteString(successStyle.Render(fmt.Sprintf("💰 Total: %.2f PLN/month (%.2f PLN/year)",
-		totalMonthly, totalYearly)))
-	s.WriteString("\n")
-	s.WriteString(infoStyle.Render("Press 'j/k' to navigate, 'l' to view, 'e' to edit, 'd' to delete, 'h' to go back"))
+	// Compact status line combining position, total, and controls
+	statusLine := fmt.Sprintf("Service %d/%d | 💰 %.0f PLN/mo | j/k:nav l:view e:edit d:del h:back",
+		m.cursor+1, len(m.services), totalMonthly)
+	s.WriteString(infoStyle.Render(statusLine))
 	s.WriteString("\n")
 	return s.String()
 }
