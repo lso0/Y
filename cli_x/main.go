@@ -71,6 +71,10 @@ type model struct {
 	selectedService int
 	tempService     Service
 	editingIndex    int
+
+	// Terminal dimensions for responsive design
+	terminalWidth  int
+	terminalHeight int
 }
 
 var (
@@ -191,19 +195,27 @@ func initialModel() model {
 	choices := []string{"FM", "dev", "Finance", "Knowledge"}
 
 	return model{
-		config:   config,
-		state:    mainMenu,
-		selected: make(map[int]struct{}),
-		choices:  choices,
+		config:         config,
+		state:          mainMenu,
+		selected:       make(map[int]struct{}),
+		choices:        choices,
+		terminalWidth:  80, // Default fallback
+		terminalHeight: 24, // Default fallback
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	// Request initial terminal size for responsive design
+	return tea.EnterAltScreen
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		// Handle terminal resize - make interface responsive
+		m.terminalWidth = msg.Width
+		m.terminalHeight = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		switch m.state {
 		case mainMenu:
@@ -1067,8 +1079,23 @@ func (m model) renderMenuView(s *strings.Builder) string {
 				Margin(0, 0, 0, 0)
 
 			managerBox := managerBoxStyle.Render("💰 Finance Manager")
-			summaryBox := summaryBoxStyle.Render(fmt.Sprintf("💳 %.0f PLN/mo  💰 %.0f PLN/yr  📊 %d active",
-				monthly, yearly, activeServices))
+
+			// Dynamic summary text based on terminal width
+			var summaryText string
+			if m.terminalWidth > 120 {
+				// Very wide terminal - show full details
+				summaryText = fmt.Sprintf("💳 %.2f PLN/month  💰 %.2f PLN/year  📊 %d active services",
+					monthly, yearly, activeServices)
+			} else if m.terminalWidth < 80 {
+				// Narrow terminal - minimal info
+				summaryText = fmt.Sprintf("%.0f PLN/mo  📊 %d", monthly, activeServices)
+			} else {
+				// Standard terminal - balanced info
+				summaryText = fmt.Sprintf("💳 %.0f PLN/mo  💰 %.0f PLN/yr  📊 %d active",
+					monthly, yearly, activeServices)
+			}
+
+			summaryBox := summaryBoxStyle.Render(summaryText)
 
 			// Join horizontally with minimal spacing
 			horizontalLayout := lipgloss.JoinHorizontal(lipgloss.Top, managerBox, " ", summaryBox)
@@ -1103,8 +1130,16 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		}
 	}
 
-	// Scrolling logic - show max 6 services at a time for better terminal fit
-	maxVisible := 6
+	// Dynamic scrolling based on terminal height - responsive design
+	// Calculate available space: total height - title - header - status - margins
+	availableHeight := m.terminalHeight - 6 // Reserve space for UI elements
+	if availableHeight < 3 {
+		availableHeight = 3 // Minimum services to show
+	}
+	if availableHeight > 15 {
+		availableHeight = 15 // Maximum for performance
+	}
+	maxVisible := availableHeight
 	start := 0
 	end := len(m.services)
 
@@ -1149,14 +1184,26 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		service := m.services[i]
 
 		number := fmt.Sprintf("%d. ", i+1)
+
+		// Dynamic text truncation based on terminal width
+		maxNameWidth := 20
+		maxTagWidth := 12
+		if m.terminalWidth > 100 {
+			maxNameWidth = 30
+			maxTagWidth = 18
+		} else if m.terminalWidth < 80 {
+			maxNameWidth = 15
+			maxTagWidth = 8
+		}
+
 		name := service.Name
-		if len(name) > 20 {
-			name = name[:17] + "..."
+		if len(name) > maxNameWidth {
+			name = name[:maxNameWidth-3] + "..."
 		}
 
 		tag := service.Tags
-		if len(tag) > 12 {
-			tag = tag[:9] + "..."
+		if len(tag) > maxTagWidth {
+			tag = tag[:maxTagWidth-3] + "..."
 		}
 
 		monthly := service.GetMonthlyCost()
@@ -1168,18 +1215,49 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		}
 
 		renewal := service.GetRenewalInfo()
-		if len(renewal) > 15 {
-			renewal = renewal[:12] + "..."
+		maxRenewalWidth := 15
+		if m.terminalWidth > 100 {
+			maxRenewalWidth = 20
+		} else if m.terminalWidth < 80 {
+			maxRenewalWidth = 10
+		}
+		if len(renewal) > maxRenewalWidth {
+			renewal = renewal[:maxRenewalWidth-3] + "..."
 		}
 
-		line := fmt.Sprintf("%s%s %-20s %-12s %7.2f PLN/mo %s %s",
-			number, status, name, tag, monthly, renewal,
-			func() string {
-				if service.Student {
-					return "🎓"
-				}
-				return ""
-			}())
+		// Dynamic line formatting based on terminal width
+		var line string
+		if m.terminalWidth > 100 {
+			// Wide terminal - show full information
+			line = fmt.Sprintf("%s%s %-30s %-18s %8.2f PLN/mo %-20s %s",
+				number, status, name, tag, monthly, renewal,
+				func() string {
+					if service.Student {
+						return "🎓"
+					}
+					return ""
+				}())
+		} else if m.terminalWidth < 80 {
+			// Narrow terminal - compact format
+			line = fmt.Sprintf("%s%s %-15s %6.0f PLN %s",
+				number, status, name, monthly,
+				func() string {
+					if service.Student {
+						return "🎓"
+					}
+					return ""
+				}())
+		} else {
+			// Standard terminal - balanced format
+			line = fmt.Sprintf("%s%s %-20s %-12s %7.2f PLN/mo %s %s",
+				number, status, name, tag, monthly, renewal,
+				func() string {
+					if service.Student {
+						return "🎓"
+					}
+					return ""
+				}())
+		}
 
 		if m.cursor == i {
 			s.WriteString(selectedStyle.Render(line))
@@ -1195,9 +1273,21 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		s.WriteString("\n")
 	}
 
-	// Compact status line combining position, total, and controls
-	statusLine := fmt.Sprintf("Service %d/%d | 💰 %.0f PLN/mo | j/k:nav l:view e:edit d:del h:back",
-		m.cursor+1, len(m.services), totalMonthly)
+	// Dynamic status line based on terminal width
+	var statusLine string
+	if m.terminalWidth > 100 {
+		// Wide terminal - show full status
+		statusLine = fmt.Sprintf("Service %d of %d | 💰 %.2f PLN/month | j/k:navigate l:view e:edit d:delete h:back",
+			m.cursor+1, len(m.services), totalMonthly)
+	} else if m.terminalWidth < 80 {
+		// Narrow terminal - minimal status
+		statusLine = fmt.Sprintf("%d/%d | %.0f PLN | j/k/l/e/d/h",
+			m.cursor+1, len(m.services), totalMonthly)
+	} else {
+		// Standard terminal - balanced status
+		statusLine = fmt.Sprintf("Service %d/%d | 💰 %.0f PLN/mo | j/k:nav l:view e:edit d:del h:back",
+			m.cursor+1, len(m.services), totalMonthly)
+	}
 	s.WriteString(infoStyle.Render(statusLine))
 	return s.String()
 }
