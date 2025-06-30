@@ -1,0 +1,365 @@
+services:
+    - name: Apple Dev - PT
+      tags: Dev
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 429
+      recurrence: "Y"
+      renewal_date: "2026-01-01"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Pomo Tasks
+      tags: Domain
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 87.84
+      recurrence: 2Y
+      renewal_date: "2027-01-23"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Replit
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 490
+      recurrence: "Y"
+      renewal_date: "2025-11-30"
+      status: 1
+      student: true
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Headspace
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 174.57
+      recurrence: M
+      renewal_date: "2025-08-03"
+      status: 1
+      student: true
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Speechify
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 401.4
+      recurrence: "Y"
+      renewal_date: "2025-08-06"
+      status: 1
+      student: true
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Cursor
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 1562
+      recurrence: "Y"
+      renewal_date: "2025-10-19"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Blinkist
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 185.28
+      recurrence: "Y"
+      renewal_date: "2026-03-16"
+      status: 1
+      student: true
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Paste
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 149.99
+      recurrence: "Y"
+      renewal_date: "2025-08-23"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: MidJourney
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 1446
+      recurrence: "Y"
+      renewal_date: "2025-11-25"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: 1Password
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 478.13
+      recurrence: "Y"
+      renewal_date: "2026-01-27"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Disney+
+      tags: Streaming services
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 299.9
+      recurrence: "Y"
+      renewal_date: "2025-11-01"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: AppleTV
+      tags: Streaming services
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 349
+      recurrence: "Y"
+      renewal_date: "2025-10-20"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: iCloud
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 14.99
+        c_yearly: 0
+      recurrence: M
+      renewal_date: "2025-07-21"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: ZUS
+      tags: Insurance
+      prices:
+        currency: PLN
+        c_monthly: 757.86
+        c_yearly: 0
+      recurrence: M
+      renewal_date: "2025-07-20"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: ZUS_(VAT-EU)
+      tags: Insurance
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 0
+      recurrence: M
+      renewal_date: "2025-05-25"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: ChatGPT
+      tags: AI
+      prices:
+        currency: PLN
+        c_monthly: 99.99
+        c_yearly: 0
+      recurrence: M
+      renewal_date: "2025-06-28"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: TickTick
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 107.09
+      recurrence: "Y"
+      renewal_date: "2026-02-25"
+      status: 1
+      student: true
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: TryHackMe
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 391.95
+      recurrence: "Y"
+      renewal_date: "2026-03-29"
+      status: 1
+      student: true
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Design+Code
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 231.7
+      recurrence: "Y"
+      renewal_date: "2026-04-03"
+      status: 1
+      student: true
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: CodeAcademy
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 564.32
+      recurrence: "Y"
+      renewal_date: "2026-04-25"
+      status: 1
+      student: true
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Warp
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 1816.17
+      recurrence: "Y"
+      renewal_date: "2026-04-28"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Amazon Prime
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 49
+      recurrence: M
+      renewal_date: "2025-07-05"
+      status: 1
+      student: false
+      trial_end_date: "2025-07-05"
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Amazon Prime
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 49
+      recurrence: M
+      renewal_date: "2025-07-05"
+      status: 1
+      student: false
+      trial_end_date: "2025-07-05"
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: SkyShowtime
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 14.99
+        c_yearly: 0
+      recurrence: M
+      renewal_date: "2026-07-19"
+      status: 1
+      student: true
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: AdBlock
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 19.13
+        c_yearly: 0
+      recurrence: M
+      renewal_date: "2025-07-19"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: FastMail
+      tags: Softwares
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 613.12
+      recurrence: "Y"
+      renewal_date: "2028-06-30"
+      status: 1
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
