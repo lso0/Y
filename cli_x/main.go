@@ -1051,13 +1051,31 @@ func (m model) renderMenuView(s *strings.Builder) string {
 				}
 			}
 
-			// Create horizontal layout with boxes
-			managerBox := headerStyle.Render("💰 Finance Manager")
-			summaryBox := successStyle.Render(fmt.Sprintf("💳 %.2f PLN/month  💰 %.2f PLN/year  📊 %d active services",
+			// Create styled boxes
+			managerBoxStyle := lipgloss.NewStyle().
+				Foreground(textColor).
+				Background(secondaryColor).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(accentColor).
+				Bold(true).
+				Padding(0, 2).
+				Margin(0, 1, 0, 0)
+
+			summaryBoxStyle := lipgloss.NewStyle().
+				Foreground(textColor).
+				Background(backgroundDark).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(accentColor).
+				Padding(0, 2).
+				Margin(0, 1, 0, 0)
+
+			managerBox := managerBoxStyle.Render("💰 Finance Manager")
+			summaryBox := summaryBoxStyle.Render(fmt.Sprintf("💳 %.2f PLN/month  💰 %.2f PLN/year  📊 %d active services",
 				monthly, yearly, activeServices))
 
-			// Display them horizontally
-			s.WriteString(managerBox + "  " + summaryBox)
+			// Join horizontally with proper spacing
+			horizontalLayout := lipgloss.JoinHorizontal(lipgloss.Top, managerBox, summaryBox)
+			s.WriteString(horizontalLayout)
 		}
 		s.WriteString("\n")
 	}
