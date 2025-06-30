@@ -292,7 +292,7 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.message = ""
 		case 2: // Finance
 			m.state = financeMenu
-			m.choices = []string{"View Services", "Add Service", "Summary Report", "Categories"}
+			m.choices = []string{"View Services", "Add Service", "Categories"}
 			// Ensure cursor is within bounds
 			if m.financeMenuCursor >= len(m.choices) {
 				m.financeMenuCursor = 0
@@ -472,17 +472,7 @@ func (m model) updateFinanceMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.state = financeInputName
 			m.input = ""
 			m.message = ""
-		case 2: // Summary Report
-			data, err := loadFinanceData()
-			if err != nil {
-				m.message = errorStyle.Render(fmt.Sprintf("Error loading finance data: %v", err))
-				return m, nil
-			}
-			m.financeData = data
-			monthly := data.GetTotalMonthlyCost()
-			yearly := data.GetTotalYearlyCost()
-			m.message = successStyle.Render(fmt.Sprintf("💰 Total: %.2f PLN/month (%.2f PLN/year)", monthly, yearly))
-		case 3: // Categories
+		case 2: // Categories
 			data, err := loadFinanceData()
 			if err != nil {
 				m.message = errorStyle.Render(fmt.Sprintf("Error loading finance data: %v", err))
@@ -797,7 +787,7 @@ func (m model) updateFinanceInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = financeMenu
 		m.cursor = m.financeMenuCursor
-		m.choices = []string{"View Services", "Add Service", "Summary Report", "Categories"}
+		m.choices = []string{"View Services", "Add Service", "Categories"}
 		m.input = ""
 		m.tempService = Service{}
 	case "enter":
@@ -881,7 +871,7 @@ func (m model) updateFinanceInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 			m.state = financeMenu
 			m.cursor = m.financeMenuCursor
-			m.choices = []string{"View Services", "Add Service", "Summary Report", "Categories"}
+			m.choices = []string{"View Services", "Add Service", "Categories"}
 			m.input = ""
 			m.tempService = Service{}
 			m.editingIndex = -1
@@ -1041,6 +1031,33 @@ func (m model) renderMenuView(s *strings.Builder) string {
 				m.config.MainAccount.Name, m.config.MainAccount.Email)))
 		} else {
 			s.WriteString(errorStyle.Render("⚠️  Please setup your FastMail account first"))
+		}
+		s.WriteString("\n")
+	}
+
+	// Show finance summary for Finance menu
+	if m.state == financeMenu {
+		// Load finance data to display summary
+		data, err := loadFinanceData()
+		if err != nil {
+			s.WriteString(errorStyle.Render(fmt.Sprintf("Error loading finance data: %v", err)))
+		} else {
+			monthly := data.GetTotalMonthlyCost()
+			yearly := data.GetTotalYearlyCost()
+			activeServices := 0
+			for _, service := range data.Services {
+				if service.Status == 1 {
+					activeServices++
+				}
+			}
+
+			// Create horizontal layout with boxes
+			managerBox := headerStyle.Render("💰 Finance Manager")
+			summaryBox := successStyle.Render(fmt.Sprintf("💳 %.2f PLN/month  💰 %.2f PLN/year  📊 %d active services",
+				monthly, yearly, activeServices))
+
+			// Display them horizontally
+			s.WriteString(managerBox + "  " + summaryBox)
 		}
 		s.WriteString("\n")
 	}
