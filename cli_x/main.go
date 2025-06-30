@@ -1130,32 +1130,26 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		}
 	}
 
-	// Dynamic scrolling based on terminal height - responsive design
-	// Calculate available space: total height - title - header - status - margins
-	availableHeight := m.terminalHeight - 6 // Reserve space for UI elements
-	if availableHeight < 3 {
-		availableHeight = 3 // Minimum services to show
-	}
-	if availableHeight > 15 {
-		availableHeight = 15 // Maximum for performance
-	}
-	maxVisible := availableHeight
+	// Fixed number of services displayed - consistent scrolling experience
+	maxVisible := 5
 	start := 0
 	end := len(m.services)
 
 	if len(m.services) > maxVisible {
-		// Ensure cursor is always visible by adjusting scroll window
-		// If cursor is in the top part, start from beginning
-		if m.cursor < maxVisible-2 {
+		// Smooth scrolling logic - scroll when cursor moves near edges
+		// Keep cursor in middle 3 positions when possible (positions 1, 2, 3 of 5)
+
+		if m.cursor < 2 {
+			// At the beginning - show first 5 services
 			start = 0
 			end = maxVisible
-		} else if m.cursor >= len(m.services)-(maxVisible-2) {
-			// If cursor is in the bottom part, show last maxVisible items
+		} else if m.cursor >= len(m.services)-2 {
+			// At the end - show last 5 services
 			start = len(m.services) - maxVisible
 			end = len(m.services)
 		} else {
-			// Otherwise, center the cursor in the visible window
-			start = m.cursor - (maxVisible/2 - 1)
+			// In the middle - keep cursor at position 2 (middle of 5)
+			start = m.cursor - 2
 			end = start + maxVisible
 		}
 
