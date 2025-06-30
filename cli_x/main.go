@@ -911,7 +911,6 @@ func (m model) View() string {
 	}
 
 	s.WriteString(titleStyle.Render(title))
-	s.WriteString("\n")
 
 	if m.message != "" {
 		s.WriteString(m.message)
@@ -987,8 +986,6 @@ func (m model) View() string {
 		s.WriteString(infoStyle.Render("💡 Get your API key from: https://app.fastmail.com/settings/security/tokens/new"))
 	}
 
-	s.WriteString("\n")
-	// Help text removed for cleaner design
 	return s.String()
 }
 
@@ -1106,8 +1103,8 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		}
 	}
 
-	// Scrolling logic - show max 8 services at a time for better terminal fit
-	maxVisible := 8
+	// Scrolling logic - show max 6 services at a time for better terminal fit
+	maxVisible := 6
 	start := 0
 	end := len(m.services)
 
@@ -1141,9 +1138,9 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		}
 	}
 
-	// Show scroll indicator at top
+	// Show compact scroll indicator at top
 	if start > 0 {
-		s.WriteString(infoStyle.Render(fmt.Sprintf("↑ %d more services above...", start)))
+		s.WriteString(infoStyle.Render(fmt.Sprintf("↑ %d more above", start)))
 		s.WriteString("\n")
 	}
 
@@ -1192,9 +1189,9 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		s.WriteString("\n")
 	}
 
-	// Show scroll indicator at bottom
+	// Show compact scroll indicator at bottom
 	if end < len(m.services) {
-		s.WriteString(infoStyle.Render(fmt.Sprintf("↓ %d more below...", len(m.services)-end)))
+		s.WriteString(infoStyle.Render(fmt.Sprintf("↓ %d more below", len(m.services)-end)))
 		s.WriteString("\n")
 	}
 
@@ -1202,7 +1199,6 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 	statusLine := fmt.Sprintf("Service %d/%d | 💰 %.0f PLN/mo | j/k:nav l:view e:edit d:del h:back",
 		m.cursor+1, len(m.services), totalMonthly)
 	s.WriteString(infoStyle.Render(statusLine))
-	s.WriteString("\n")
 	return s.String()
 }
 
