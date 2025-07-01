@@ -1004,49 +1004,7 @@ func (m model) View() string {
 }
 
 func (m model) renderMenuView(s *strings.Builder) string {
-	var headerText string
-	switch m.state {
-	case mainMenu:
-		headerText = "🏠 Select Category"
-	case fmMenu:
-		headerText = "📧 FastMail Tools"
-	case devMenu:
-		headerText = "💻 Development Tools"
-	case financeMenu:
-		headerText = "💰 Finance Tools"
-	case knowledgeMenu:
-		headerText = "🧠 Knowledge Base"
-	case ytMenu:
-		headerText = "📺 YouTube Tools"
-	}
-
-	s.WriteString(headerStyle.Render(headerText))
-	s.WriteString("\n")
-
-	for i, choice := range m.choices {
-		number := fmt.Sprintf("%d. ", i+1)
-		content := number + choice
-
-		if m.cursor == i {
-			s.WriteString(selectedStyle.Render(content))
-		} else {
-			s.WriteString(menuStyle.Render(content))
-		}
-		s.WriteString("\n")
-	}
-
-	// Show account status for FM menu (more compact)
-	if m.state == fmMenu {
-		if m.config.HasAccount() {
-			s.WriteString(successStyle.Render(fmt.Sprintf("Account: %s (%s)",
-				m.config.MainAccount.Name, m.config.MainAccount.Email)))
-		} else {
-			s.WriteString(errorStyle.Render("⚠️  Please setup your FastMail account first"))
-		}
-		s.WriteString("\n")
-	}
-
-	// Show finance summary for Finance menu
+	// Show finance summary for Finance menu FIRST (before header)
 	if m.state == financeMenu {
 		// Load finance data to display summary
 		data, err := loadFinanceData()
@@ -1102,6 +1060,49 @@ func (m model) renderMenuView(s *strings.Builder) string {
 			// Join horizontally with minimal spacing
 			horizontalLayout := lipgloss.JoinHorizontal(lipgloss.Top, managerBox, " ", summaryBox)
 			s.WriteString(horizontalLayout)
+		}
+		s.WriteString("\n")
+	}
+
+	// Now show the header text - properly aligned below title/summary boxes
+	var headerText string
+	switch m.state {
+	case mainMenu:
+		headerText = "🏠 Select Category"
+	case fmMenu:
+		headerText = "📧 FastMail Tools"
+	case devMenu:
+		headerText = "💻 Development Tools"
+	case financeMenu:
+		headerText = "💰 Finance Tools"
+	case knowledgeMenu:
+		headerText = "🧠 Knowledge Base"
+	case ytMenu:
+		headerText = "📺 YouTube Tools"
+	}
+
+	s.WriteString(headerStyle.Render(headerText))
+	s.WriteString("\n")
+
+	for i, choice := range m.choices {
+		number := fmt.Sprintf("%d. ", i+1)
+		content := number + choice
+
+		if m.cursor == i {
+			s.WriteString(selectedStyle.Render(content))
+		} else {
+			s.WriteString(menuStyle.Render(content))
+		}
+		s.WriteString("\n")
+	}
+
+	// Show account status for FM menu (more compact)
+	if m.state == fmMenu {
+		if m.config.HasAccount() {
+			s.WriteString(successStyle.Render(fmt.Sprintf("Account: %s (%s)",
+				m.config.MainAccount.Name, m.config.MainAccount.Email)))
+		} else {
+			s.WriteString(errorStyle.Render("⚠️  Please setup your FastMail account first"))
 		}
 		s.WriteString("\n")
 	}
