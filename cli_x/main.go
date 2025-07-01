@@ -98,13 +98,14 @@ var (
 			Margin(0, 0, 0, 0).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor).
-			Align(lipgloss.Center)
+			Align(lipgloss.Left)
 
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(accentColor).
-			Padding(0, 1).
-			Margin(0, 0, 0, 0)
+			Padding(0, 2).
+			Margin(0, 0, 0, 0).
+			Align(lipgloss.Left)
 
 	menuStyle = lipgloss.NewStyle().
 			Foreground(textColor).
@@ -925,6 +926,7 @@ func (m model) View() string {
 	}
 
 	s.WriteString(titleStyle.Render(title))
+	s.WriteString("\n\n")
 
 	if m.message != "" {
 		s.WriteString(m.message)
@@ -1020,16 +1022,7 @@ func (m model) renderMenuView(s *strings.Builder) string {
 				}
 			}
 
-			// Create compact styled boxes with minimal padding
-			managerBoxStyle := lipgloss.NewStyle().
-				Foreground(textColor).
-				Background(secondaryColor).
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(accentColor).
-				Bold(true).
-				Padding(0, 1).
-				Margin(0, 0, 0, 0)
-
+			// Create compact styled summary box
 			summaryBoxStyle := lipgloss.NewStyle().
 				Foreground(textColor).
 				Background(backgroundDark).
@@ -1037,8 +1030,6 @@ func (m model) renderMenuView(s *strings.Builder) string {
 				BorderForeground(accentColor).
 				Padding(0, 1).
 				Margin(0, 0, 0, 0)
-
-			managerBox := managerBoxStyle.Render("💰 Finance Manager")
 
 			// Dynamic summary text based on terminal width
 			var summaryText string
@@ -1056,10 +1047,7 @@ func (m model) renderMenuView(s *strings.Builder) string {
 			}
 
 			summaryBox := summaryBoxStyle.Render(summaryText)
-
-			// Join horizontally with minimal spacing
-			horizontalLayout := lipgloss.JoinHorizontal(lipgloss.Top, managerBox, " ", summaryBox)
-			s.WriteString(horizontalLayout)
+			s.WriteString(summaryBox)
 		}
 		s.WriteString("\n")
 	}
@@ -1082,7 +1070,7 @@ func (m model) renderMenuView(s *strings.Builder) string {
 	}
 
 	s.WriteString(headerStyle.Render(headerText))
-	s.WriteString("\n")
+	s.WriteString("\n\n")
 
 	for i, choice := range m.choices {
 		number := fmt.Sprintf("%d. ", i+1)
