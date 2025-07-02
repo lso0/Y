@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"cli_x/fm"
+	fm "cli_x/mail"
+	"cli_x/system"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -41,6 +42,14 @@ const (
 	financeInputYearly
 	financeInputRecurrence
 	financeInputRenewalDate
+	// GitHub states
+	ghMenu
+	ghRepos
+	ghStarred
+	// Alias states
+	aliasMenu
+	aliasList
+	aliasAdd
 )
 
 type model struct {
@@ -56,6 +65,7 @@ type model struct {
 	emails        []fm.EmailSummary
 	selectedEmail *fm.Email
 	emailClient   *fm.EmailClient
+	emailPage     int // Current page (0-based)
 	loading       bool
 	// Memory system for cursor positions
 	mainMenuCursor      int
@@ -75,6 +85,27 @@ type model struct {
 	// Terminal dimensions for responsive design
 	terminalWidth  int
 	terminalHeight int
+
+	// Status message for dev menu (shown at bottom)
+	devMenuStatus string
+
+	// Status message for YT menu (shown at bottom)
+	ytMenuStatus string
+
+	// Battery information for status bar
+	battery *system.BatteryInfo
+
+	// VPN information for status bar
+	vpn *system.VPNInfo
+
+	// GitHub data
+	githubClient *GitHubClient
+	githubUser   string
+	repositories []Repository
+	ghMenuCursor int
+
+	// Finance input tracking
+	financeInputField int // 0=name, 1=tag, 2=monthly
 }
 
 var (
@@ -88,6 +119,7 @@ var (
 	mutedColor     = lipgloss.Color("#A0AEC0") // Gray-400
 	backgroundDark = lipgloss.Color("#1A202C") // Gray-900
 	borderColor    = lipgloss.Color("#4A5568") // Gray-600
+	orangeColor    = lipgloss.Color("#FF8C00") // Orange for selection
 
 	// Enhanced styles
 	titleStyle = lipgloss.NewStyle().
@@ -109,22 +141,14 @@ var (
 
 	menuStyle = lipgloss.NewStyle().
 			Foreground(textColor).
-			Background(backgroundDark).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(borderColor).
-			Padding(0, 2).
-			Margin(0, 1, 0, 0).
-			Width(28)
+			Padding(0, 1).
+			Margin(0, 0, 0, 0)
 
 	selectedStyle = lipgloss.NewStyle().
-			Foreground(textColor).
-			Background(secondaryColor).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(accentColor).
+			Foreground(orangeColor).
 			Bold(true).
-			Padding(0, 2).
-			Margin(0, 1, 0, 0).
-			Width(28)
+			Padding(0, 1).
+			Margin(0, 0, 0, 0)
 
 	emailListStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -184,6 +208,16 @@ var (
 	loadingStyle = lipgloss.NewStyle().
 			Foreground(warningColor).
 			Bold(true)
+
+	statusBarStyle = lipgloss.NewStyle().
+			Foreground(mutedColor).
+			Background(backgroundDark).
+			Align(lipgloss.Right).
+			Padding(0, 1)
+
+	placeholderStyle = lipgloss.NewStyle().
+				Foreground(mutedColor).
+				Italic(true)
 )
 
 func initialModel() model {
@@ -193,7 +227,7 @@ func initialModel() model {
 	}
 
 	// Main menu with four categories
-	choices := []string{"FM", "dev", "Finance", "Knowledge"}
+	choices := []string{"FM", "Dev", "Finance", "Knowledge"}
 
 	return model{
 		config:         config,
@@ -206,8 +240,8 @@ func initialModel() model {
 }
 
 func (m model) Init() tea.Cmd {
-	// Request initial terminal size for responsive design
-	return tea.EnterAltScreen
+	// Request initial terminal size and fetch system info
+	return tea.Batch(tea.EnterAltScreen, m.fetchBattery(), m.fetchVPN())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -218,24 +252,51 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.terminalHeight = msg.Height
 		return m, nil
 	case tea.KeyMsg:
+		// Refresh battery info on any key press (lightweight)
+		cmds := []tea.Cmd{}
+
 		switch m.state {
 		case mainMenu:
-			return m.updateMainMenu(msg)
+			model, cmd := m.updateMainMenu(msg)
+			cmds = append(cmds, cmd)
+			cmds = append(cmds, m.fetchBattery(), m.fetchVPN()) // Refresh system info
+			return model, tea.Batch(cmds...)
 		case fmMenu:
-			return m.updateFMMenu(msg)
+			model, cmd := m.updateFMMenu(msg)
+			cmds = append(cmds, cmd)
+			cmds = append(cmds, m.fetchBattery(), m.fetchVPN()) // Refresh system info
+			return model, tea.Batch(cmds...)
 		case devMenu:
-			return m.updateDevMenu(msg)
+			model, cmd := m.updateDevMenu(msg)
+			cmds = append(cmds, cmd)
+			cmds = append(cmds, m.fetchBattery(), m.fetchVPN()) // Refresh system info
+			return model, tea.Batch(cmds...)
 		case financeMenu:
-			return m.updateFinanceMenu(msg)
+			model, cmd := m.updateFinanceMenu(msg)
+			cmds = append(cmds, cmd)
+			cmds = append(cmds, m.fetchBattery(), m.fetchVPN()) // Refresh system info
+			return model, tea.Batch(cmds...)
 		case knowledgeMenu:
-			return m.updateKnowledgeMenu(msg)
+			model, cmd := m.updateKnowledgeMenu(msg)
+			cmds = append(cmds, cmd)
+			cmds = append(cmds, m.fetchBattery(), m.fetchVPN()) // Refresh system info
+			return model, tea.Batch(cmds...)
 		case ytMenu:
-			return m.updateYTMenu(msg)
+			model, cmd := m.updateYTMenu(msg)
+			cmds = append(cmds, cmd)
+			cmds = append(cmds, m.fetchBattery(), m.fetchVPN()) // Refresh system info
+			return model, tea.Batch(cmds...)
+		case ghMenu:
+			return m.updateGHMenu(msg)
+		case ghRepos:
+			return m.updateGHRepos(msg)
+		case ghStarred:
+			return m.updateGHStarred(msg)
 		case financeList:
 			return m.updateFinanceList(msg)
 		case financeView:
 			return m.updateFinanceView(msg)
-		case financeInputName, financeInputTag, financeInputMonthly, financeInputYearly, financeInputRecurrence, financeInputRenewalDate:
+		case financeInputName:
 			return m.updateFinanceInput(msg)
 		case addAccount:
 			return m.updateAddAccount(msg)
@@ -256,8 +317,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.emails = msg.emails
 			m.emailClient = msg.client
+			m.emailPage = 0 // Reset to first page
+			m.cursor = 0    // Reset cursor to first email
 			m.message = ""
 		}
+		return m, nil
+	case batteryFetchedMsg:
+		m.battery = msg.battery
+		return m, nil
+	case vpnFetchedMsg:
+		m.vpn = msg.vpn
 		return m, nil
 	}
 	return m, nil
@@ -286,7 +355,7 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if !m.config.HasAccount() {
 				m.choices = []string{"Setup Account"}
 			} else {
-				m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings"}
+				m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Aliases"}
 			}
 			// Ensure cursor is within bounds
 			if m.fmMenuCursor >= len(m.choices) {
@@ -294,18 +363,19 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.cursor = m.fmMenuCursor
 			m.message = ""
-		case 1: // dev
+		case 1: // Dev
 			m.state = devMenu
-			m.choices = []string{"Docker Tools", "Deploy Scripts", "System Utils", "Code Gen"}
+			m.choices = []string{"docker", "gh", "gcp", "pxc", "x-automation"}
 			// Ensure cursor is within bounds
 			if m.devMenuCursor >= len(m.choices) {
 				m.devMenuCursor = 0
 			}
 			m.cursor = m.devMenuCursor
 			m.message = ""
+			m.devMenuStatus = "" // Clear dev menu status when entering
 		case 2: // Finance
 			m.state = financeMenu
-			m.choices = []string{"View Services", "Add Service", "Categories"}
+			m.choices = []string{"View Services", "Add Service"}
 			// Ensure cursor is within bounds
 			if m.financeMenuCursor >= len(m.choices) {
 				m.financeMenuCursor = 0
@@ -334,25 +404,28 @@ func (m model) updateYTMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = knowledgeMenu
 		m.cursor = m.knowledgeMenuCursor
 		m.choices = []string{"YT", "Medium"}
+		m.ytMenuStatus = "" // Clear YT menu status when leaving
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
 			m.cursor++
 		}
+		m.ytMenuStatus = "" // Clear status when navigating
 	case "k": // Move up
 		if m.cursor > 0 {
 			m.cursor--
 		}
+		m.ytMenuStatus = "" // Clear status when navigating
 	case "l": // Select
 		// Save current YT menu position
 		m.ytMenuCursor = m.cursor
 
 		switch m.cursor {
 		case 0: // Video Manager
-			m.message = infoStyle.Render("Video Manager - Coming Soon!")
+			m.ytMenuStatus = "Video Manager - Coming Soon!"
 		case 1: // Analytics
-			m.message = infoStyle.Render("Analytics Dashboard - Coming Soon!")
+			m.ytMenuStatus = "Analytics Dashboard - Coming Soon!"
 		case 2: // Settings
-			m.message = infoStyle.Render("YouTube Settings - Coming Soon!")
+			m.ytMenuStatus = "YouTube Settings - Coming Soon!"
 		}
 	}
 	return m, nil
@@ -365,7 +438,7 @@ func (m model) updateFMMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = mainMenu
 		m.cursor = m.mainMenuCursor
-		m.choices = []string{"FM", "dev", "Finance", "Knowledge"}
+		m.choices = []string{"FM", "Dev", "Finance", "Knowledge"}
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
 			m.cursor++
@@ -396,8 +469,8 @@ func (m model) updateFMMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, m.fetchEmails()
 			case 1: // Compose Email
 				m.message = infoStyle.Render("Email composing feature coming soon!")
-			case 2: // Account Settings
-				m.state = viewAccount
+			case 2: // Aliases
+				m.state = aliasMenu
 				m.cursor = 0
 				m.message = ""
 			}
@@ -413,28 +486,56 @@ func (m model) updateDevMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = mainMenu
 		m.cursor = m.mainMenuCursor
-		m.choices = []string{"FM", "dev", "Finance", "Knowledge"}
+		m.choices = []string{"FM", "Dev", "Finance", "Knowledge"}
+		m.devMenuStatus = "" // Clear dev menu status when leaving
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
 			m.cursor++
 		}
+		m.devMenuStatus = "" // Clear status when navigating
 	case "k": // Move up
 		if m.cursor > 0 {
 			m.cursor--
 		}
+		m.devMenuStatus = "" // Clear status when navigating
 	case "l": // Select
 		// Save current dev menu position
 		m.devMenuCursor = m.cursor
 
 		switch m.cursor {
-		case 0: // Docker Tools
-			m.message = infoStyle.Render("Docker Management Tools - Coming Soon!")
-		case 1: // Deploy Scripts
-			m.message = infoStyle.Render("Deployment Scripts - Coming Soon!")
-		case 2: // System Utils
-			m.message = infoStyle.Render("System Utilities - Coming Soon!")
-		case 3: // Code Gen
-			m.message = infoStyle.Render("Code Generation Tools - Coming Soon!")
+		case 0: // docker
+			m.devMenuStatus = "Docker Management Tools - Coming Soon!"
+		case 1: // gh
+			// Initialize GitHub client if not already done
+			if m.githubClient == nil {
+				client, err := NewGitHubClient()
+				if err != nil {
+					m.devMenuStatus = fmt.Sprintf("Error: %v", err)
+				} else {
+					m.githubClient = client
+					user, err := client.GetAuthenticatedUser()
+					if err != nil {
+						m.devMenuStatus = fmt.Sprintf("Error getting user: %v", err)
+					} else {
+						m.githubUser = user
+						m.state = ghMenu
+						m.choices = []string{"View Starred Repos", "View My Repos", "Account Info"}
+						m.cursor = 0
+						m.devMenuStatus = ""
+					}
+				}
+			} else {
+				m.state = ghMenu
+				m.choices = []string{"View Starred Repos", "View My Repos", "Account Info"}
+				m.cursor = 0
+				m.devMenuStatus = ""
+			}
+		case 2: // gcp
+			m.devMenuStatus = "Google Cloud Platform Tools - Coming Soon!"
+		case 3: // pxc
+			m.devMenuStatus = "Proxmox Cluster Tools - Coming Soon!"
+		case 4: // x-automation
+			m.devMenuStatus = "X-Automation Tools (firecrawl, proxy) - Coming Soon!"
 		}
 	}
 	return m, nil
@@ -447,7 +548,7 @@ func (m model) updateFinanceMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = mainMenu
 		m.cursor = m.mainMenuCursor
-		m.choices = []string{"FM", "dev", "Finance", "Knowledge"}
+		m.choices = []string{"FM", "Dev", "Finance", "Knowledge"}
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
 			m.cursor++
@@ -474,25 +575,21 @@ func (m model) updateFinanceMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.message = ""
 		case 1: // Add Service
-			m.state = financeAdd
 			m.tempService = Service{
-				Prices:      Prices{Currency: "PLN"},
+				Name:        "",
+				Tags:        "general",
+				Prices:      Prices{Currency: "PLN", CMonthly: 0.0, CYearly: 0.0},
 				Status:      1,
+				Recurrence:  "M",
+				RenewalDate: time.Now().AddDate(0, 1, 0).Format("2006-01-02"),
 				BankService: "ING",
-				Card:        "5123 4567 8901 2345",
-				Account:     "wiktor11gal@gmail.com",
+				Card:        "****-****-****-****",
+				Account:     "default@example.com",
 			}
 			m.state = financeInputName
+			m.financeInputField = 0
 			m.input = ""
 			m.message = ""
-		case 2: // Categories
-			data, err := loadFinanceData()
-			if err != nil {
-				m.message = errorStyle.Render(fmt.Sprintf("Error loading finance data: %v", err))
-				return m, nil
-			}
-			categories := data.GetCategories()
-			m.message = infoStyle.Render(fmt.Sprintf("📂 Categories: %s", strings.Join(categories, ", ")))
 		}
 	}
 	return m, nil
@@ -505,7 +602,7 @@ func (m model) updateKnowledgeMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = mainMenu
 		m.cursor = m.mainMenuCursor
-		m.choices = []string{"FM", "dev", "Finance", "Knowledge"}
+		m.choices = []string{"FM", "Dev", "Finance", "Knowledge"}
 	case "j": // Move down
 		if m.cursor < len(m.choices)-1 {
 			m.cursor++
@@ -528,6 +625,7 @@ func (m model) updateKnowledgeMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.cursor = m.ytMenuCursor
 			m.message = ""
+			m.ytMenuStatus = "" // Clear YT menu status when entering
 		case 1: // Medium
 			m.message = infoStyle.Render("Medium Integration - Coming Soon!")
 		}
@@ -542,7 +640,7 @@ func (m model) fetchEmails() tea.Cmd {
 			return emailFetchedMsg{err: err}
 		}
 
-		emails, err := client.GetInboxEmails(20)
+		emails, err := client.GetInboxEmails(120) // Fetch 120 emails (3 pages of 40)
 		if err != nil {
 			return emailFetchedMsg{err: err}
 		}
@@ -551,10 +649,34 @@ func (m model) fetchEmails() tea.Cmd {
 	}
 }
 
+func (m model) fetchBattery() tea.Cmd {
+	return func() tea.Msg {
+		battery, err := system.GetBatteryInfo()
+		return batteryFetchedMsg{battery: battery, err: err}
+	}
+}
+
+func (m model) fetchVPN() tea.Cmd {
+	return func() tea.Msg {
+		vpn, err := system.GetVPNInfo()
+		return vpnFetchedMsg{vpn: vpn, err: err}
+	}
+}
+
 type emailFetchedMsg struct {
 	emails []fm.EmailSummary
 	client *fm.EmailClient
 	err    error
+}
+
+type batteryFetchedMsg struct {
+	battery *system.BatteryInfo
+	err     error
+}
+
+type vpnFetchedMsg struct {
+	vpn *system.VPNInfo
+	err error
 }
 
 func (m model) updateReadEmails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -569,7 +691,7 @@ func (m model) updateReadEmails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !m.config.HasAccount() {
 			m.choices = []string{"Setup Account"}
 		} else {
-			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings"}
+			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Aliases"}
 		}
 	case "j": // Move down
 		if m.cursor < len(m.emails)-1 {
@@ -579,11 +701,32 @@ func (m model) updateReadEmails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor > 0 {
 			m.cursor--
 		}
+	case "l": // View/Read email
+		if m.cursor < len(m.emails) {
+			// Switch to viewEmail state (implementation can be enhanced later)
+			m.state = viewEmail
+		}
 	case "r":
 		// Refresh emails
 		if m.config.HasAccount() {
 			m.loading = true
 			return m, m.fetchEmails()
+		}
+	case "shift+1", "!":
+		// Go to page 1
+		m.emailPage = 0
+		m.cursor = 0
+	case "shift+2", "@":
+		// Go to page 2
+		if len(m.emails) > 40 {
+			m.emailPage = 1
+			m.cursor = 40 // Start of page 2
+		}
+	case "shift+3", "#":
+		// Go to page 3
+		if len(m.emails) > 80 {
+			m.emailPage = 2
+			m.cursor = 80 // Start of page 3
 		}
 	}
 	return m, nil
@@ -595,7 +738,7 @@ func (m model) updateViewEmail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "h": // Go back
 		m.state = readEmails
-		m.cursor = 0
+		// Keep cursor position when going back
 	}
 	return m, nil
 }
@@ -621,7 +764,7 @@ func (m model) updateViewAccount(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !m.config.HasAccount() {
 			m.choices = []string{"Setup Account"}
 		} else {
-			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings"}
+			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Aliases"}
 		}
 	case "l": // Select/Edit
 		// Start editing account
@@ -688,7 +831,7 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.message = successStyle.Render("✓ Account saved successfully!")
 				// Update choices to show full FM menu now that account is set up
-				m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings"}
+				m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Aliases"}
 			}
 
 			m.state = fmMenu
@@ -715,7 +858,7 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = financeMenu
 		m.cursor = m.financeMenuCursor
-		m.choices = []string{"View Services", "Add Service", "Categories"}
+		m.choices = []string{"View Services", "Add Service"}
 	case "j": // Move down
 		if m.cursor < len(m.services)-1 {
 			m.cursor++
@@ -754,6 +897,7 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.editingIndex = m.cursor
 			m.tempService = m.services[m.cursor]
 			m.state = financeInputName
+			m.financeInputField = 0
 			m.input = m.tempService.Name
 			m.message = ""
 		}
@@ -772,6 +916,7 @@ func (m model) updateFinanceView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editingIndex = m.selectedService
 		m.tempService = m.services[m.selectedService]
 		m.state = financeInputName
+		m.financeInputField = 0
 		m.input = m.tempService.Name
 		m.message = ""
 	case "d": // Delete
@@ -797,97 +942,36 @@ func (m model) updateFinanceInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-	case "h": // Go back
+	case "esc", "h": // Go back
 		m.state = financeMenu
 		m.cursor = m.financeMenuCursor
-		m.choices = []string{"View Services", "Add Service", "Categories"}
+		m.choices = []string{"View Services", "Add Service"}
 		m.input = ""
 		m.tempService = Service{}
+		m.financeInputField = 0
+	case "tab": // Move to next field
+		m.saveCurrentField()
+		m.financeInputField++
+		if m.financeInputField > 2 { // Only 3 fields now (0, 1, 2)
+			m.financeInputField = 0
+		}
+		m.loadFieldValue()
+	case "shift+tab": // Move to previous field
+		m.saveCurrentField()
+		m.financeInputField--
+		if m.financeInputField < 0 { // Loop to last field
+			m.financeInputField = 2
+		}
+		m.loadFieldValue()
 	case "enter":
-		switch m.state {
-		case financeInputName:
-			if strings.TrimSpace(m.input) == "" {
-				m.message = errorStyle.Render("Name cannot be empty")
-				return m, nil
-			}
-			m.tempService.Name = strings.TrimSpace(m.input)
-			m.state = financeInputTag
-			m.input = m.tempService.Tags
-		case financeInputTag:
-			if strings.TrimSpace(m.input) == "" {
-				m.message = errorStyle.Render("Tag/Category cannot be empty")
-				return m, nil
-			}
-			m.tempService.Tags = strings.TrimSpace(m.input)
-			m.state = financeInputMonthly
-			m.input = fmt.Sprintf("%.2f", m.tempService.Prices.CMonthly)
-		case financeInputMonthly:
-			if val, err := strconv.ParseFloat(strings.TrimSpace(m.input), 64); err == nil {
-				m.tempService.Prices.CMonthly = val
-			}
-			m.state = financeInputYearly
-			m.input = fmt.Sprintf("%.2f", m.tempService.Prices.CYearly)
-		case financeInputYearly:
-			if val, err := strconv.ParseFloat(strings.TrimSpace(m.input), 64); err == nil {
-				m.tempService.Prices.CYearly = val
-			}
-			m.state = financeInputRecurrence
-			m.input = m.tempService.Recurrence
-		case financeInputRecurrence:
-			recurrence := strings.TrimSpace(m.input)
-			if recurrence == "" {
-				recurrence = "Y"
-			}
-			m.tempService.Recurrence = recurrence
-			m.state = financeInputRenewalDate
-			m.input = m.tempService.RenewalDate
-		case financeInputRenewalDate:
-			if strings.TrimSpace(m.input) != "" {
-				if _, err := time.Parse("2006-01-02", strings.TrimSpace(m.input)); err != nil {
-					m.message = errorStyle.Render("Date format should be YYYY-MM-DD")
-					return m, nil
-				}
-			}
-			m.tempService.RenewalDate = strings.TrimSpace(m.input)
-
+		// Save current field and move to next, or save service if on last field
+		m.saveCurrentField()
+		if m.financeInputField < 2 {
+			m.financeInputField++
+			m.loadFieldValue()
+		} else {
 			// Save the service
-			var err error
-			if m.editingIndex >= 0 {
-				// Editing existing service
-				err = m.financeData.UpdateService(m.editingIndex, m.tempService)
-				if err == nil {
-					err = saveFinanceData(m.financeData)
-				}
-				if err != nil {
-					m.message = errorStyle.Render(fmt.Sprintf("Error updating service: %v", err))
-				} else {
-					m.message = successStyle.Render("✓ Service updated successfully!")
-				}
-			} else {
-				// Adding new service
-				if m.financeData == nil {
-					data, loadErr := loadFinanceData()
-					if loadErr != nil {
-						m.message = errorStyle.Render(fmt.Sprintf("Error loading finance data: %v", loadErr))
-						return m, nil
-					}
-					m.financeData = data
-				}
-				m.financeData.AddService(m.tempService)
-				err = saveFinanceData(m.financeData)
-				if err != nil {
-					m.message = errorStyle.Render(fmt.Sprintf("Error saving service: %v", err))
-				} else {
-					m.message = successStyle.Render("✓ Service added successfully!")
-				}
-			}
-
-			m.state = financeMenu
-			m.cursor = m.financeMenuCursor
-			m.choices = []string{"View Services", "Add Service", "Categories"}
-			m.input = ""
-			m.tempService = Service{}
-			m.editingIndex = -1
+			return m.saveFinanceService()
 		}
 	case "backspace":
 		if len(m.input) > 0 {
@@ -901,32 +985,212 @@ func (m model) updateFinanceInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// Helper function to save current field value
+func (m *model) saveCurrentField() {
+	value := strings.TrimSpace(m.input)
+
+	switch m.financeInputField {
+	case 0: // Name
+		if value != "" {
+			m.tempService.Name = value
+		}
+	case 1: // Tag
+		if value != "" {
+			m.tempService.Tags = value
+		}
+	case 2: // Monthly
+		if value != "" {
+			if val, err := strconv.ParseFloat(value, 64); err == nil {
+				m.tempService.Prices.CMonthly = val
+			}
+		}
+	}
+}
+
+// Helper function to load field value into input
+func (m *model) loadFieldValue() {
+	switch m.financeInputField {
+	case 0: // Name
+		m.input = m.tempService.Name
+	case 1: // Tag
+		m.input = m.tempService.Tags
+	case 2: // Monthly
+		if m.tempService.Prices.CMonthly > 0 {
+			m.input = fmt.Sprintf("%.2f", m.tempService.Prices.CMonthly)
+		} else {
+			m.input = ""
+		}
+	}
+}
+
+// Helper function to save the service
+func (m model) saveFinanceService() (tea.Model, tea.Cmd) {
+	// Validate required fields
+	if m.tempService.Name == "" {
+		m.message = errorStyle.Render("Service name is required")
+		m.financeInputField = 0
+		m.loadFieldValue()
+		return m, nil
+	}
+
+	// Ensure finance data is loaded
+	if m.financeData == nil {
+		data, loadErr := loadFinanceData()
+		if loadErr != nil {
+			m.message = errorStyle.Render(fmt.Sprintf("Error loading finance data: %v", loadErr))
+			return m, nil
+		}
+		m.financeData = data
+	}
+
+	var err error
+	if m.editingIndex >= 0 {
+		// Editing existing service
+		err = m.financeData.UpdateService(m.editingIndex, m.tempService)
+		if err == nil {
+			err = saveFinanceData(m.financeData)
+		}
+		if err != nil {
+			m.message = errorStyle.Render(fmt.Sprintf("Error updating service: %v", err))
+		} else {
+			m.message = successStyle.Render("✓ Service updated successfully!")
+		}
+	} else {
+		// Adding new service
+		m.financeData.AddService(m.tempService)
+		err = saveFinanceData(m.financeData)
+		if err != nil {
+			m.message = errorStyle.Render(fmt.Sprintf("Error saving service: %v", err))
+		} else {
+			m.message = successStyle.Render("✓ Service added successfully!")
+		}
+	}
+
+	m.state = financeMenu
+	m.cursor = m.financeMenuCursor
+	m.choices = []string{"View Services", "Add Service"}
+	m.input = ""
+	m.tempService = Service{}
+	m.editingIndex = -1
+	m.financeInputField = 0
+	return m, nil
+}
+
+func (m model) updateGHMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back
+		m.state = devMenu
+		m.cursor = m.devMenuCursor
+		m.choices = []string{"docker", "gh", "gcp", "pxc", "x-automation"}
+		m.devMenuStatus = ""
+	case "j": // Move down
+		if m.cursor < len(m.choices)-1 {
+			m.cursor++
+		}
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "l": // Select
+		switch m.cursor {
+		case 0: // View Starred Repos
+			if m.githubClient != nil {
+				repos, err := m.githubClient.GetStarredRepos(20)
+				if err != nil {
+					m.message = errorStyle.Render(fmt.Sprintf("Error fetching starred repos: %v", err))
+				} else {
+					m.repositories = repos
+					m.state = ghStarred
+					m.cursor = 0
+					m.message = ""
+				}
+			}
+		case 1: // View My Repos
+			if m.githubClient != nil {
+				repos, err := m.githubClient.GetUserRepos(20)
+				if err != nil {
+					m.message = errorStyle.Render(fmt.Sprintf("Error fetching repos: %v", err))
+				} else {
+					m.repositories = repos
+					m.state = ghRepos
+					m.cursor = 0
+					m.message = ""
+				}
+			}
+		case 2: // Account Info
+			if m.githubUser != "" {
+				m.message = successStyle.Render(fmt.Sprintf("Logged in as: %s", m.githubUser))
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateGHRepos(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back
+		m.state = ghMenu
+		m.cursor = 0
+		m.choices = []string{"View Starred Repos", "View My Repos", "Account Info"}
+	case "j": // Move down
+		if m.cursor < len(m.repositories)-1 {
+			m.cursor++
+		}
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateGHStarred(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back
+		m.state = ghMenu
+		m.cursor = 0
+		m.choices = []string{"View Starred Repos", "View My Repos", "Account Info"}
+	case "j": // Move down
+		if m.cursor < len(m.repositories)-1 {
+			m.cursor++
+		}
+	case "k": // Move up
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	}
+	return m, nil
+}
+
 func (m model) View() string {
 	var s strings.Builder
 
-	// Dynamic title based on current state
-	var title string
-	switch m.state {
-	case mainMenu:
-		title = "🚀 CLI-X Main Menu"
-	case fmMenu:
-		title = "📧 FastMail Manager"
-	case devMenu:
-		title = "💻 Development Tools"
-	case financeMenu:
-		title = "💰 Finance Manager"
-	case financeList, financeView, financeInputName, financeInputTag, financeInputMonthly, financeInputYearly, financeInputRecurrence, financeInputRenewalDate:
-		title = "💰 Finance Manager"
-	case knowledgeMenu:
-		title = "🧠 Knowledge Base"
-	case ytMenu:
-		title = "📺 YouTube Manager"
-	default:
-		title = "📧 FastMail Manager"
-	}
+	// Status bar with VPN and battery info (minimalistic)
+	if m.vpn != nil || m.battery != nil {
+		var statusText string
 
-	s.WriteString(titleStyle.Render(title))
-	s.WriteString("\n\n")
+		// VPN status (if available)
+		if m.vpn != nil {
+			statusText += m.vpn.Icon + " "
+		}
+
+		// Battery status (if available)
+		if m.battery != nil {
+			statusText += fmt.Sprintf("%s%d%%", m.battery.Icon, m.battery.Percentage)
+		}
+
+		if statusText != "" {
+			statusBar := statusBarStyle.Width(m.terminalWidth - 2).Render(statusText)
+			s.WriteString(statusBar)
+			s.WriteString("\n")
+		}
+	}
 
 	if m.message != "" {
 		s.WriteString(m.message)
@@ -934,8 +1198,11 @@ func (m model) View() string {
 	}
 
 	switch m.state {
-	case mainMenu, fmMenu, devMenu, financeMenu, knowledgeMenu, ytMenu:
+	case mainMenu, fmMenu, devMenu, financeMenu, knowledgeMenu, ytMenu, ghMenu:
 		return m.renderMenuView(&s)
+
+	case ghRepos, ghStarred:
+		return m.renderGitHubRepos(&s)
 
 	case financeList:
 		return m.renderFinanceList(&s)
@@ -943,29 +1210,21 @@ func (m model) View() string {
 	case financeView:
 		return m.renderFinanceView(&s)
 
-	case financeInputName, financeInputTag, financeInputMonthly, financeInputYearly, financeInputRecurrence, financeInputRenewalDate:
+	case financeInputName:
 		return m.renderFinanceInput(&s)
 
 	case readEmails:
-		s.WriteString(headerStyle.Render("📧 Inbox"))
-		s.WriteString("\n")
-
 		if m.loading {
 			s.WriteString(loadingStyle.Render("⏳ Loading emails..."))
 		} else if len(m.emails) == 0 {
 			s.WriteString(infoStyle.Render("📭 No emails found"))
+			s.WriteString("\n")
+			s.WriteString(infoStyle.Render("Press 'r' to refresh, 'h' to go back"))
 		} else {
-			emailList := emailListStyle.Render(m.renderEmailList())
-			s.WriteString(emailList)
+			return m.renderEmailMatrix(&s)
 		}
 
-		s.WriteString("\n")
-		s.WriteString(infoStyle.Render("Press 'r' to refresh, 'h' to go back"))
-
 	case viewAccount:
-		s.WriteString(headerStyle.Render("Account Settings"))
-		s.WriteString("\n")
-
 		if m.config.HasAccount() {
 			account := m.config.MainAccount
 			s.WriteString(fmt.Sprintf("📛 Name: %s\n", account.Name))
@@ -976,26 +1235,18 @@ func (m model) View() string {
 		}
 
 	case inputName:
-		s.WriteString(headerStyle.Render("👤 Account Setup"))
-		s.WriteString("\n")
 		s.WriteString("📛 Enter account name: ")
 		s.WriteString(inputStyle.Render(m.input + "_"))
 
 	case inputEmail:
-		s.WriteString(headerStyle.Render("👤 Account Setup"))
-		s.WriteString("\n")
 		s.WriteString("📧 Enter email address: ")
 		s.WriteString(inputStyle.Render(m.input + "_"))
 
 	case inputPassword:
-		s.WriteString(headerStyle.Render("👤 Account Setup"))
-		s.WriteString("\n")
 		s.WriteString("🔒 Enter password: ")
 		s.WriteString(inputStyle.Render(strings.Repeat("*", len(m.input)) + "_"))
 
 	case inputAPIKey:
-		s.WriteString(headerStyle.Render("👤 Account Setup"))
-		s.WriteString("\n")
 		s.WriteString("🔑 Enter API key: ")
 		s.WriteString(inputStyle.Render(m.input + "_"))
 		s.WriteString("\n")
@@ -1052,25 +1303,7 @@ func (m model) renderMenuView(s *strings.Builder) string {
 		s.WriteString("\n")
 	}
 
-	// Now show the header text - properly aligned below title/summary boxes
-	var headerText string
-	switch m.state {
-	case mainMenu:
-		headerText = "🏠 Select Category"
-	case fmMenu:
-		headerText = "📧 FastMail Tools"
-	case devMenu:
-		headerText = "💻 Development Tools"
-	case financeMenu:
-		headerText = "💰 Finance Tools"
-	case knowledgeMenu:
-		headerText = "🧠 Knowledge Base"
-	case ytMenu:
-		headerText = "📺 YouTube Tools"
-	}
-
-	s.WriteString(headerStyle.Render(headerText))
-	s.WriteString("\n\n")
+	// Removed header for minimalistic design
 
 	for i, choice := range m.choices {
 		number := fmt.Sprintf("%d. ", i+1)
@@ -1095,16 +1328,27 @@ func (m model) renderMenuView(s *strings.Builder) string {
 		s.WriteString("\n")
 	}
 
+	// Show dev menu status at the bottom
+	if m.state == devMenu && m.devMenuStatus != "" {
+		s.WriteString("\n")
+		s.WriteString(infoStyle.Render(m.devMenuStatus))
+		s.WriteString("\n")
+	}
+
+	// Show YT menu status at the bottom
+	if m.state == ytMenu && m.ytMenuStatus != "" {
+		s.WriteString("\n")
+		s.WriteString(infoStyle.Render(m.ytMenuStatus))
+		s.WriteString("\n")
+	}
+
 	s.WriteString("\n")
 	return s.String()
 }
 
 func (m model) renderFinanceList(s *strings.Builder) string {
-	s.WriteString(headerStyle.Render("💰 Finance Services"))
-	s.WriteString("\n")
-
 	if len(m.services) == 0 {
-		s.WriteString(infoStyle.Render("📭 No services found"))
+		s.WriteString(infoStyle.Render("No services found"))
 		s.WriteString("\n")
 		s.WriteString(infoStyle.Render("Press 'h' to go back"))
 		s.WriteString("\n")
@@ -1122,25 +1366,25 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 	}
 
 	// Fixed number of services displayed - consistent scrolling experience
-	maxVisible := 5
+	maxVisible := 40
 	start := 0
 	end := len(m.services)
 
 	if len(m.services) > maxVisible {
 		// Smooth scrolling logic - scroll when cursor moves near edges
-		// Keep cursor in middle 3 positions when possible (positions 1, 2, 3 of 5)
+		// Keep cursor in middle positions when possible (positions 10-30 of 40)
 
-		if m.cursor < 2 {
-			// At the beginning - show first 5 services
+		if m.cursor < 10 {
+			// At the beginning - show first 40 services
 			start = 0
 			end = maxVisible
-		} else if m.cursor >= len(m.services)-2 {
-			// At the end - show last 5 services
+		} else if m.cursor >= len(m.services)-10 {
+			// At the end - show last 40 services
 			start = len(m.services) - maxVisible
 			end = len(m.services)
 		} else {
-			// In the middle - keep cursor at position 2 (middle of 5)
-			start = m.cursor - 2
+			// In the middle - keep cursor at position 20 (middle of 40)
+			start = m.cursor - 20
 			end = start + maxVisible
 		}
 
@@ -1168,17 +1412,17 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 	for i := start; i < end; i++ {
 		service := m.services[i]
 
-		number := fmt.Sprintf("%d. ", i+1)
-
-		// Dynamic text truncation based on terminal width
-		maxNameWidth := 20
-		maxTagWidth := 12
-		if m.terminalWidth > 100 {
-			maxNameWidth = 30
-			maxTagWidth = 18
+		// Text truncation to fit fixed column widths
+		var maxNameWidth, maxTagWidth int
+		if m.terminalWidth > 120 {
+			maxNameWidth = 25
+			maxTagWidth = 15
 		} else if m.terminalWidth < 80 {
-			maxNameWidth = 15
-			maxTagWidth = 8
+			maxNameWidth = 20
+			maxTagWidth = 12
+		} else {
+			maxNameWidth = 22
+			maxTagWidth = 14
 		}
 
 		name := service.Name
@@ -1193,77 +1437,48 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 
 		monthly := service.GetMonthlyCost()
 
-		// Enhanced status indicators including expiration
-		var status string
-		if service.Status == 1 {
-			// Check if service is expired
-			renewalDate, err := time.Parse("2006-01-02", service.RenewalDate)
-			if err == nil && renewalDate.Before(time.Now()) {
-				status = "🔴" // Expired - red dot
-			} else if err == nil && renewalDate.Before(time.Now().AddDate(0, 0, 30)) {
-				status = "🟡" // Expiring soon (within 30 days) - yellow dot
-			} else {
-				status = "🟢" // Active and not expiring soon - green dot
-			}
-		} else {
-			status = "⚫" // Inactive - black dot
-		}
-
+		// Renewal date truncation for fixed column width
 		renewal := service.GetRenewalInfo()
-		maxRenewalWidth := 15
-		if m.terminalWidth > 100 {
+		var maxRenewalWidth int
+		if m.terminalWidth > 120 {
 			maxRenewalWidth = 20
 		} else if m.terminalWidth < 80 {
-			maxRenewalWidth = 10
+			// No renewal column in narrow view
+			maxRenewalWidth = 0
+		} else {
+			maxRenewalWidth = 18
 		}
-		if len(renewal) > maxRenewalWidth {
+		if maxRenewalWidth > 0 && len(renewal) > maxRenewalWidth {
 			renewal = renewal[:maxRenewalWidth-3] + "..."
 		}
 
-		// Vertical box layout for better information display
-		studentBadge := ""
-		if service.Student {
-			studentBadge = " 🎓"
-		}
+		// Get status indicator (green/orange/red)
+		statusIndicator := service.GetStatusIndicator()
 
-		// Create service box content
+		// Create clean matrix/table format with fixed column widths
 		var boxContent string
-		if m.terminalWidth > 100 {
-			// Wide terminal - detailed vertical layout
-			boxContent = fmt.Sprintf("%s %s %s%s\n📂 %s | 💳 %.2f PLN/mo | 📅 %s",
-				number, status, name, studentBadge, tag, monthly, renewal)
+		if m.terminalWidth > 120 {
+			// Wide terminal - detailed matrix layout
+			boxContent = fmt.Sprintf("%s %3d. %-25s | %-15s | %8.2f PLN/mo | %-20s",
+				statusIndicator, i+1, name, tag, monthly, renewal)
 		} else if m.terminalWidth < 80 {
-			// Narrow terminal - compact vertical layout
-			boxContent = fmt.Sprintf("%s %s %s%s\n%.0f PLN/mo | %s",
-				number, status, name, studentBadge, monthly, renewal)
+			// Narrow terminal - compact matrix layout
+			boxContent = fmt.Sprintf("%s %2d. %-20s | %-12s | %6.0f PLN",
+				statusIndicator, i+1, name, tag, monthly)
 		} else {
-			// Standard terminal - balanced vertical layout
-			boxContent = fmt.Sprintf("%s %s %s%s\n📂 %s | 💳 %.2f PLN/mo | 📅 %s",
-				number, status, name, studentBadge, tag, monthly, renewal)
+			// Standard terminal - balanced matrix layout
+			boxContent = fmt.Sprintf("%s %2d. %-22s | %-14s | %7.2f PLN/mo | %-18s",
+				statusIndicator, i+1, name, tag, monthly, renewal)
 		}
 
-		// Create styled box for each service
-		serviceBoxStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			Padding(0, 1).
-			Margin(0, 0, 1, 0).
-			Width(m.terminalWidth - 10) // Adaptive width
-
+		// Minimalistic service rendering without boxes
 		if m.cursor == i {
-			// Selected service - highlight with accent color
-			serviceBoxStyle = serviceBoxStyle.
-				BorderForeground(accentColor).
-				Background(secondaryColor).
-				Bold(true)
+			// Selected service - highlight with orange color
+			s.WriteString(selectedStyle.Render(boxContent))
 		} else {
-			// Unselected service - standard styling
-			serviceBoxStyle = serviceBoxStyle.
-				BorderForeground(borderColor).
-				Background(backgroundDark)
+			// Unselected service - normal style
+			s.WriteString(menuStyle.Render(boxContent))
 		}
-
-		serviceBox := serviceBoxStyle.Render(boxContent)
-		s.WriteString(serviceBox)
 		s.WriteString("\n")
 	}
 
@@ -1277,7 +1492,7 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 	var statusLine string
 	if m.terminalWidth > 100 {
 		// Wide terminal - show full status
-		statusLine = fmt.Sprintf("Service %d of %d | 💰 %.2f PLN/month | j/k:navigate l:view e:edit d:delete h:back",
+		statusLine = fmt.Sprintf("Service %d of %d | %.2f PLN/month | j/k:navigate l:view e:edit d:delete h:back",
 			m.cursor+1, len(m.services), totalMonthly)
 	} else if m.terminalWidth < 80 {
 		// Narrow terminal - minimal status
@@ -1285,7 +1500,7 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 			m.cursor+1, len(m.services), totalMonthly)
 	} else {
 		// Standard terminal - balanced status
-		statusLine = fmt.Sprintf("Service %d/%d | 💰 %.0f PLN/mo | j/k:nav l:view e:edit d:del h:back",
+		statusLine = fmt.Sprintf("Service %d/%d | %.0f PLN/mo | j/k:nav l:view e:edit d:del h:back",
 			m.cursor+1, len(m.services), totalMonthly)
 	}
 	s.WriteString(infoStyle.Render(statusLine))
@@ -1300,9 +1515,6 @@ func (m model) renderFinanceView(s *strings.Builder) string {
 	}
 
 	service := m.services[m.selectedService]
-
-	s.WriteString(headerStyle.Render(fmt.Sprintf("💰 %s", service.Name)))
-	s.WriteString("\n")
 
 	s.WriteString(fmt.Sprintf("📂 Category: %s\n", service.Tags))
 	s.WriteString(fmt.Sprintf("💳 Monthly: %.2f %s\n", service.Prices.CMonthly, service.Prices.Currency))
@@ -1335,87 +1547,258 @@ func (m model) renderFinanceView(s *strings.Builder) string {
 }
 
 func (m model) renderFinanceInput(s *strings.Builder) string {
-	var title, prompt string
+	// Use Option 4: Terminal Prompt style
+	return m.renderTerminalPrompt(s)
+}
 
-	if m.editingIndex >= 0 {
-		title = "✏️ Edit Service"
-	} else {
-		title = "➕ Add Service"
+func (m model) renderHorizontalInput(s *strings.Builder) string {
+	fields := []struct {
+		name  string
+		value string
+	}{
+		{"Name", m.tempService.Name},
+		{"Tag", m.tempService.Tags},
+		{"Monthly", fmt.Sprintf("%.2f", m.tempService.Prices.CMonthly)},
 	}
 
-	switch m.state {
-	case financeInputName:
-		prompt = "📝 Service Name"
-	case financeInputTag:
-		prompt = "📂 Category/Tag"
-	case financeInputMonthly:
-		prompt = "💳 Monthly Cost (PLN)"
-	case financeInputYearly:
-		prompt = "💰 Yearly Cost (PLN)"
-	case financeInputRecurrence:
-		prompt = "🔄 Recurrence (Y/M/2Y)"
-	case financeInputRenewalDate:
-		prompt = "📅 Renewal Date (YYYY-MM-DD)"
+	for i, field := range fields {
+		s.WriteString(field.name)
+		s.WriteString(": ")
+
+		if i == m.financeInputField {
+			// Current field being edited
+			if m.input != "" {
+				s.WriteString(lipgloss.NewStyle().Foreground(textColor).Render(m.input))
+			} else if field.value != "" && field.value != "0.00" {
+				s.WriteString(lipgloss.NewStyle().Foreground(textColor).Render(field.value))
+			} else {
+				s.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render("..."))
+			}
+			s.WriteString(lipgloss.NewStyle().Foreground(orangeColor).Render("_"))
+		} else {
+			// Other fields - show current values
+			if field.value != "" && field.value != "0.00" {
+				s.WriteString(lipgloss.NewStyle().Foreground(textColor).Render(field.value))
+			} else {
+				s.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render("..."))
+			}
+		}
+
+		if i < len(fields)-1 {
+			s.WriteString("  ")
+		}
 	}
-
-	s.WriteString(headerStyle.Render(title))
-	s.WriteString("\n")
-	s.WriteString(fmt.Sprintf("%s: ", prompt))
-	s.WriteString(inputStyle.Render(m.input + "_"))
-	s.WriteString("\n")
-
-	// Show helpful hints
-	switch m.state {
-	case financeInputRecurrence:
-		s.WriteString(infoStyle.Render("💡 Y = Yearly, M = Monthly, 2Y = Every 2 years"))
-	case financeInputRenewalDate:
-		s.WriteString(infoStyle.Render("💡 Format: 2025-12-31"))
-	}
-
 	s.WriteString("\n")
 	return s.String()
 }
 
-func (m model) renderEmailList() string {
-	var items []string
+func (m model) renderTerminalPrompt(s *strings.Builder) string {
+	prompts := []string{
+		"Service name?",
+		"Category?",
+		"Monthly cost?",
+	}
 
-	for i, email := range m.emails {
-		number := fmt.Sprintf("%d. ", i+1)
+	if m.financeInputField < len(prompts) {
+		s.WriteString(prompts[m.financeInputField])
+		s.WriteString(" ")
 
-		unreadMarker := " "
-		if email.IsUnread {
-			unreadMarker = unreadStyle.Render("●")
+		if m.input != "" {
+			s.WriteString(lipgloss.NewStyle().Foreground(textColor).Render(m.input))
+		}
+		s.WriteString(lipgloss.NewStyle().Foreground(orangeColor).Render("_"))
+		s.WriteString("\n")
+	}
+	return s.String()
+}
+
+func (m model) renderEmailMatrix(s *strings.Builder) string {
+	if len(m.emails) == 0 {
+		s.WriteString(infoStyle.Render("No emails found"))
+		s.WriteString("\n")
+		s.WriteString(infoStyle.Render("Press 'h' to go back"))
+		s.WriteString("\n")
+		return s.String()
+	}
+
+	// Page-based display - 40 emails per page
+	emailsPerPage := 40
+	totalPages := (len(m.emails) + emailsPerPage - 1) / emailsPerPage // Ceiling division
+
+	// Ensure current page is valid
+	if m.emailPage >= totalPages {
+		m.emailPage = totalPages - 1
+	}
+	if m.emailPage < 0 {
+		m.emailPage = 0
+	}
+
+	// Calculate start and end for current page
+	start := m.emailPage * emailsPerPage
+	end := start + emailsPerPage
+	if end > len(m.emails) {
+		end = len(m.emails)
+	}
+
+	// Adjust cursor to stay within current page bounds
+	pageStart := start
+	pageEnd := end - 1
+	if m.cursor < pageStart {
+		m.cursor = pageStart
+	}
+	if m.cursor > pageEnd {
+		m.cursor = pageEnd
+	}
+
+	// Show page indicator at top
+	if totalPages > 1 {
+		pageInfo := fmt.Sprintf("Page %d of %d | Use Shift+1/2/3 to switch pages", m.emailPage+1, totalPages)
+		s.WriteString(infoStyle.Render(pageInfo))
+		s.WriteString("\n")
+	}
+
+	// Display visible emails in matrix format
+	for i := start; i < end; i++ {
+		email := m.emails[i]
+
+		// Text truncation to fit fixed column widths
+		var maxFromWidth, maxSubjectWidth int
+		if m.terminalWidth > 120 {
+			maxFromWidth = 25
+			maxSubjectWidth = 50
+		} else if m.terminalWidth < 80 {
+			maxFromWidth = 15
+			maxSubjectWidth = 25
+		} else {
+			maxFromWidth = 20
+			maxSubjectWidth = 35
 		}
 
+		// From field truncation
+		fromDisplay := email.From
+		if len(fromDisplay) > maxFromWidth {
+			fromDisplay = fromDisplay[:maxFromWidth-3] + "..."
+		}
+
+		// Subject field truncation
+		subjectDisplay := email.Subject
+		if subjectDisplay == "" {
+			subjectDisplay = "(no subject)"
+		}
+		if len(subjectDisplay) > maxSubjectWidth {
+			subjectDisplay = subjectDisplay[:maxSubjectWidth-3] + "..."
+		}
+
+		// Date formatting
 		timeStr := email.Date.Format("15:04")
 		if !email.Date.Truncate(24 * time.Hour).Equal(time.Now().Truncate(24 * time.Hour)) {
 			timeStr = email.Date.Format("Jan 2")
 		}
 
-		subjectDisplay := email.Subject
-		if len(subjectDisplay) > 50 {
-			subjectDisplay = subjectDisplay[:47] + "..."
-		}
-		if subjectDisplay == "" {
-			subjectDisplay = "(no subject)"
+		// Unread status indicator (minimalistic)
+		statusIndicator := "📖" // Read
+		if email.IsUnread {
+			statusIndicator = "📩" // Unread
 		}
 
-		fromDisplay := email.From
-		if len(fromDisplay) > 20 {
-			fromDisplay = fromDisplay[:17] + "..."
-		}
-
-		line := fmt.Sprintf("%s%s %s  %-20s  %s",
-			number, unreadMarker, timeStr, fromDisplay, subjectDisplay)
-
-		if m.cursor == i {
-			items = append(items, emailSelectedStyle.Render(line))
+		// Create clean matrix/table format with fixed column widths
+		var boxContent string
+		if m.terminalWidth > 120 {
+			// Wide terminal - detailed matrix layout
+			boxContent = fmt.Sprintf("%s %3d. %-25s | %-50s | %8s",
+				statusIndicator, i+1, fromDisplay, subjectDisplay, timeStr)
+		} else if m.terminalWidth < 80 {
+			// Narrow terminal - compact matrix layout
+			boxContent = fmt.Sprintf("%s %2d. %-15s | %-25s",
+				statusIndicator, i+1, fromDisplay, subjectDisplay)
 		} else {
-			items = append(items, emailItemStyle.Render(line))
+			// Standard terminal - balanced matrix layout
+			boxContent = fmt.Sprintf("%s %2d. %-20s | %-35s | %8s",
+				statusIndicator, i+1, fromDisplay, subjectDisplay, timeStr)
+		}
+
+		// Minimalistic email rendering without boxes
+		if m.cursor == i {
+			// Selected email - highlight with orange color
+			s.WriteString(selectedStyle.Render(boxContent))
+		} else {
+			// Unselected email - normal style
+			s.WriteString(menuStyle.Render(boxContent))
+		}
+		s.WriteString("\n")
+	}
+
+	// Dynamic status line based on terminal width
+	unreadCount := 0
+	for _, email := range m.emails {
+		if email.IsUnread {
+			unreadCount++
 		}
 	}
 
-	return strings.Join(items, "\n")
+	var statusLine string
+	if m.terminalWidth > 100 {
+		// Wide terminal - show full status with page info
+		statusLine = fmt.Sprintf("Email %d of %d | Page %d/%d | %d unread | j/k:nav l:read Shift+1/2/3:page r:refresh h:back",
+			m.cursor+1, len(m.emails), m.emailPage+1, totalPages, unreadCount)
+	} else if m.terminalWidth < 80 {
+		// Narrow terminal - minimal status
+		statusLine = fmt.Sprintf("%d/%d | P%d/%d | %d unread | j/k/l/r/h/Shift+1-3",
+			m.cursor+1, len(m.emails), m.emailPage+1, totalPages, unreadCount)
+	} else {
+		// Standard terminal - balanced status
+		statusLine = fmt.Sprintf("Email %d/%d | Page %d/%d | %d unread | j/k:nav l:read Shift+1/2/3:page r:refresh h:back",
+			m.cursor+1, len(m.emails), m.emailPage+1, totalPages, unreadCount)
+	}
+	s.WriteString(infoStyle.Render(statusLine))
+	return s.String()
+}
+
+func (m model) renderGitHubRepos(s *strings.Builder) string {
+	if len(m.repositories) == 0 {
+		s.WriteString(infoStyle.Render("No repositories found"))
+		s.WriteString("\n")
+		s.WriteString(infoStyle.Render("Press 'h' to go back"))
+		s.WriteString("\n")
+		return s.String()
+	}
+
+	// Show current GitHub user
+	if m.githubUser != "" {
+		s.WriteString(fmt.Sprintf("GitHub: %s\n\n", m.githubUser))
+	}
+
+	// Display repositories in minimalistic style
+	for i, repo := range m.repositories {
+		number := fmt.Sprintf("%d. ", i+1)
+
+		// Truncate long names and descriptions
+		name := repo.FullName
+		if len(name) > 40 {
+			name = name[:37] + "..."
+		}
+
+		desc := repo.Description
+		if len(desc) > 60 {
+			desc = desc[:57] + "..."
+		}
+		if desc == "" {
+			desc = "(no description)"
+		}
+
+		content := fmt.Sprintf("%s%s\n   %s | ⭐ %d", number, name, desc, repo.Stars)
+
+		if m.cursor == i {
+			s.WriteString(selectedStyle.Render(content))
+		} else {
+			s.WriteString(menuStyle.Render(content))
+		}
+		s.WriteString("\n")
+	}
+
+	s.WriteString("\n")
+	s.WriteString(infoStyle.Render(fmt.Sprintf("Repository %d of %d | j/k:navigate h:back", m.cursor+1, len(m.repositories))))
+	return s.String()
 }
 
 func main() {

@@ -1,2 +1,0 @@
-mitmproxy==10.2.2
-playwright==1.42.0 

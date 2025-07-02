@@ -108,6 +108,24 @@ func (s *Service) GetRenewalInfo() string {
 	}
 }
 
+func (s *Service) GetStatusIndicator() string {
+	renewalDate, err := time.Parse("2006-01-02", s.RenewalDate)
+	if err != nil {
+		return "●" // Default gray dot if date parsing fails
+	}
+
+	now := time.Now()
+	days := int(renewalDate.Sub(now).Hours() / 24)
+
+	if days < 0 {
+		return "🔴" // Red - expired
+	} else if days <= 7 {
+		return "🟠" // Orange - expires soon (within 7 days)
+	} else {
+		return "🟢" // Green - OK (more than 7 days)
+	}
+}
+
 func formatCurrency(amount float64, currency string) string {
 	return fmt.Sprintf("%.2f %s", amount, currency)
 }

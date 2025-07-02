@@ -1,18 +1,18 @@
 services:
-    - name: Apple Dev - PT
-      tags: Dev
+    - name: alpronix2
+      tags: general
       prices:
         currency: PLN
-        c_monthly: 0
-        c_yearly: 429
-      recurrence: "Y"
-      renewal_date: "2026-01-01"
+        c_monthly: 29
+        c_yearly: 0
+      recurrence: M
+      renewal_date: "2025-08-02"
       status: 1
       student: false
       trial_end_date: ""
       bank_service: ING
-      card: 5123 4567 8901 2345
-      account: wiktor11gal@gmail.com
+      card: '****-****-****-****'
+      account: default@example.com
     - name: Pomo Tasks
       tags: Domain
       prices:
