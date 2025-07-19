@@ -74,14 +74,69 @@ echo "🚀 Enabling automation server service..."
 sudo systemctl daemon-reload
 sudo systemctl enable automation-server
 
+# Auto-detect current directory and copy files
+CURRENT_DIR=$(pwd)
+echo "📁 Current directory: $CURRENT_DIR"
+
+if [[ "$CURRENT_DIR" == *"/cli_x/dev/auto/a_1" ]]; then
+    echo "✅ Detected automation files in current directory"
+    
+    # Copy automation files to project directory
+    echo "📂 Copying automation files..."
+    cp automation_server.py $PROJECT_DIR/
+    cp session_monitor.py $PROJECT_DIR/
+    cp test_server.py $PROJECT_DIR/
+    cp automation_client.py $PROJECT_DIR/
+    cp server_requirements.txt $PROJECT_DIR/
+    
+    echo "✅ Files copied successfully!"
+else
+    echo "⚠️  Not in automation directory, please copy files manually:"
+    echo "   cp automation_server.py $PROJECT_DIR/"
+    echo "   cp session_monitor.py $PROJECT_DIR/"
+    echo "   cp test_server.py $PROJECT_DIR/"
+fi
+
+# Start the automation service
+echo "🚀 Starting automation server..."
+sudo systemctl start automation-server
+
+# Wait a moment for startup
+sleep 3
+
+# Check service status
+echo "📊 Checking service status..."
+if sudo systemctl is-active --quiet automation-server; then
+    echo "✅ Automation server is running!"
+    
+    # Test the server
+    echo "🧪 Testing server connection..."
+    sleep 5  # Give server time to fully start
+    
+    if curl -s http://localhost:8888/status > /dev/null; then
+        echo "✅ Server is responding on port 8888!"
+        echo ""
+        echo "🎉 DEPLOYMENT SUCCESSFUL!"
+        echo "="*50
+        echo "🌐 Server URL: http://$(hostname -I | awk '{print $1}'):8888"
+        echo "📊 Status: curl http://localhost:8888/status"
+        echo "📝 Logs: sudo journalctl -u automation-server -f"
+        echo "🛠️  Restart: sudo systemctl restart automation-server"
+        echo ""
+        echo "🎮 Test from your MacBook:"
+        echo "   python automation_client.py --server http://$(hostname -I | awk '{print $1}'):8888 status"
+        echo ""
+    else
+        echo "⚠️  Server started but not responding yet. Check logs:"
+        echo "   sudo journalctl -u automation-server -f"
+    fi
+else
+    echo "❌ Service failed to start. Check logs:"
+    echo "   sudo journalctl -u automation-server -n 50"
+    echo "   sudo systemctl status automation-server"
+fi
+
 echo "✅ Deployment complete!"
-echo ""
-echo "Next steps:"
-echo "1. Copy automation_server.py to $PROJECT_DIR"
-echo "2. Start the service: sudo systemctl start automation-server"
-echo "3. Check status: sudo systemctl status automation-server"
-echo "4. View logs: sudo journalctl -u automation-server -f"
-echo "5. Test connection: curl http://localhost:8888/status"
 echo ""
 echo "📍 Project directory: $PROJECT_DIR"
 echo "🌐 Server will run on: http://0.0.0.0:8888" 
