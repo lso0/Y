@@ -1,18 +1,4 @@
 services:
-    - name: alpronix2
-      tags: general
-      prices:
-        currency: PLN
-        c_monthly: 29
-        c_yearly: 0
-      recurrence: M
-      renewal_date: "2025-08-02"
-      status: 1
-      student: false
-      trial_end_date: ""
-      bank_service: ING
-      card: '****-****-****-****'
-      account: default@example.com
     - name: Pomo Tasks
       tags: Domain
       prices:
@@ -290,34 +276,6 @@ services:
       status: 1
       student: false
       trial_end_date: ""
-      bank_service: ING
-      card: 5123 4567 8901 2345
-      account: wiktor11gal@gmail.com
-    - name: Amazon Prime
-      tags: Softwares
-      prices:
-        currency: PLN
-        c_monthly: 0
-        c_yearly: 49
-      recurrence: M
-      renewal_date: "2025-07-05"
-      status: 1
-      student: false
-      trial_end_date: "2025-07-05"
-      bank_service: ING
-      card: 5123 4567 8901 2345
-      account: wiktor11gal@gmail.com
-    - name: Amazon Prime
-      tags: Softwares
-      prices:
-        currency: PLN
-        c_monthly: 0
-        c_yearly: 49
-      recurrence: M
-      renewal_date: "2025-07-05"
-      status: 1
-      student: false
-      trial_end_date: "2025-07-05"
       bank_service: ING
       card: 5123 4567 8901 2345
       account: wiktor11gal@gmail.com
