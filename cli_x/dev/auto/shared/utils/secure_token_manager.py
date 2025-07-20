@@ -111,15 +111,17 @@ class SecureTokenManager:
         print("🔐 Token is now secure - YubiKey + passcode required to decrypt")
         return True
 
-    def decrypt_token(self, passcode=None):
+    def decrypt_token(self, passcode=None, quiet=False):
         """Decrypt Infisical token using YubiKey + passcode"""
         if not self.token_file.exists():
-            print(f"❌ No encrypted token found at: {self.token_file}")
-            print("💡 Run with --encrypt first to encrypt your token")
+            if not quiet:
+                print(f"❌ No encrypted token found at: {self.token_file}")
+                print("💡 Run with --encrypt first to encrypt your token")
             return None
         
-        print("🔓 Decrypting token with YubiKey...")
-        print("👆 Please touch your YubiKey when it blinks...")
+        if not quiet:
+            print("🔓 Decrypting token with YubiKey...")
+            print("👆 Please touch your YubiKey when it blinks...")
         
         # Get YubiKey response
         yubikey_response = self.get_yubikey_challenge()
@@ -164,10 +166,12 @@ class SecureTokenManager:
             padding_length = padded_token[-1]
             token = padded_token[:-padding_length].decode()
             
-            print("✅ Token decrypted successfully!")
+            if not quiet:
+                print("✅ Token decrypted successfully!")
             return token
         except Exception as e:
-            print(f"❌ Decryption failed - wrong YubiKey or passcode: {e}")
+            if not quiet:
+                print(f"❌ Decryption failed - wrong YubiKey or passcode: {e}")
             return None
 
     def run_infisical_command(self, command_args, passcode=None):
@@ -202,6 +206,7 @@ def main():
     parser = argparse.ArgumentParser(description="Secure Token Manager with YubiKey")
     parser.add_argument('--encrypt', metavar='TOKEN', help='Encrypt an Infisical token')
     parser.add_argument('--decrypt', action='store_true', help='Decrypt and display token')
+    parser.add_argument('--token-only', action='store_true', help='Decrypt and output only the token (for scripting)')
     parser.add_argument('--run', nargs='+', help='Decrypt token and run command')
     parser.add_argument('--passcode', help='Passcode (will prompt if not provided)')
     
@@ -215,6 +220,10 @@ def main():
         token = manager.decrypt_token(args.passcode)
         if token:
             print(f"🔓 Decrypted token: {token[:50]}...")
+    elif args.token_only:
+        token = manager.decrypt_token(args.passcode, quiet=True)
+        if token:
+            print(token)
     elif args.run:
         success = manager.run_infisical_command(args.run, args.passcode)
         sys.exit(0 if success else 1)
