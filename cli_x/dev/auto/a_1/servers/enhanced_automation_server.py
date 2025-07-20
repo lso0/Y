@@ -149,16 +149,18 @@ class BatchAliasResponse(BaseModel):
 server_start_time = datetime.now()
 active_tasks = {}
 
-# Load credentials from environment variables
-USERNAME = os.getenv("FASTMAIL_USERNAME")
-PASSWORD = os.getenv("FASTMAIL_PASSWORD")
+# Load credentials from environment variables (Infisical format)
+USERNAME = os.getenv("FM_M_0") or os.getenv("FASTMAIL_USERNAME")  # Try Infisical first, then fallback
+PASSWORD = os.getenv("FM_P_0") or os.getenv("FASTMAIL_PASSWORD")  # Try Infisical first, then fallback
 
 # Validate that credentials are loaded
 if not USERNAME or not PASSWORD:
     logger.error("❌ FastMail credentials not found in environment variables!")
-    logger.error("Please create a .env file in the project root with:")
-    logger.error("FASTMAIL_USERNAME=your_username")
-    logger.error("FASTMAIL_PASSWORD=your_password")
+    logger.error("Looking for either Infisical secrets (FM_M_0, FM_P_0) or .env variables (FASTMAIL_USERNAME, FASTMAIL_PASSWORD)")
+    logger.error("Available environment variables:")
+    for key in sorted(os.environ.keys()):
+        if any(x in key.upper() for x in ['FM_', 'FASTMAIL', 'USERNAME', 'PASSWORD']):
+            logger.error(f"  {key}={os.environ[key][:10]}..." if len(os.environ[key]) > 10 else f"  {key}={os.environ[key]}")
     sys.exit(1)
 
 @app.get("/")

@@ -23,13 +23,13 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")  # Load from Y/.env
 def create_alias_with_playwright(alias_email, target_email, description="", username=None, password=None):
     """Create an alias using Playwright to extract session data automatically"""
     
-    # Use provided credentials or load from environment
-    username = username or os.getenv("FASTMAIL_USERNAME")
-    password = password or os.getenv("FASTMAIL_PASSWORD")
+    # Use provided credentials or load from environment (Infisical format first, then fallback)
+    username = username or os.getenv("FM_M_0") or os.getenv("FASTMAIL_USERNAME")
+    password = password or os.getenv("FM_P_0") or os.getenv("FASTMAIL_PASSWORD")
     
     if not username or not password:
         print("❌ FastMail credentials not found!")
-        print("Please set FASTMAIL_USERNAME and FASTMAIL_PASSWORD environment variables")
+        print("Looking for either Infisical secrets (FM_M_0, FM_P_0) or .env variables (FASTMAIL_USERNAME, FASTMAIL_PASSWORD)")
         return False
     
     with sync_playwright() as p:
@@ -418,15 +418,13 @@ if __name__ == "__main__":
     print("🚀 Fastmail Automated Alias Creator")
     print("=" * 40)
     
-    # Load credentials from environment variables
-    USERNAME = os.getenv("FASTMAIL_USERNAME")
-    PASSWORD = os.getenv("FASTMAIL_PASSWORD")
+    # Load credentials from environment variables (Infisical format first, then fallback)
+    USERNAME = os.getenv("FM_M_0") or os.getenv("FASTMAIL_USERNAME")
+    PASSWORD = os.getenv("FM_P_0") or os.getenv("FASTMAIL_PASSWORD")
     
     if not USERNAME or not PASSWORD:
         print("❌ FastMail credentials not found in environment variables!")
-        print("Please create a .env file in the project root with:")
-        print("FASTMAIL_USERNAME=your_username")
-        print("FASTMAIL_PASSWORD=your_password")
+        print("Looking for either Infisical secrets (FM_M_0, FM_P_0) or .env variables (FASTMAIL_USERNAME, FASTMAIL_PASSWORD)")
         exit(1)
     
     # Get alias details from command line or use defaults for testing
