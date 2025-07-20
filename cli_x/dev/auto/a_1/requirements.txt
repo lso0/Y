@@ -1,2 +1,13 @@
+# FastMail Automation - Complete Requirements
+# Core automation dependencies
+playwright==1.42.0
 mitmproxy==10.2.2
-playwright==1.42.0 
+
+# FastAPI server dependencies  
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+python-multipart==0.0.6
+
+# HTTP client dependencies
+requests==2.31.0 
