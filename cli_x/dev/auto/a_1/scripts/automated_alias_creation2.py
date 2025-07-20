@@ -4,7 +4,7 @@ Automated Fastmail alias creation using Playwright
 This script will:
 1. Launch a browser
 2. Navigate to Fastmail
-3. Automatically log in with hardcoded credentials
+3. Let you log in
 4. Extract session data automatically
 5. Create the alias using the JMAP API
 """
@@ -14,7 +14,7 @@ import requests
 import json
 import time
 
-def create_alias_with_playwright(alias_email, target_email, description="", username="wg0", password="ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK"):
+def create_alias_with_playwright(alias_email, target_email, description="", username="", password=""):
     """Create an alias using Playwright to extract session data automatically"""
     
     with sync_playwright() as p:
@@ -407,17 +407,10 @@ if __name__ == "__main__":
     USERNAME = "wg0"
     PASSWORD = "ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK"
     
-    # Get alias details from command line or use defaults for testing
-    import sys
-    if len(sys.argv) >= 3:
-        alias_email = sys.argv[1]
-        target_email = sys.argv[2]
-        description = sys.argv[3] if len(sys.argv) > 3 else ""
-    else:
-        # Default values for testing
-        alias_email = "nya19@fastmail.com"
-        target_email = "wg0@fastmail.com"
-        description = "Test alias"
+    # Hardcoded alias details
+    alias_email = "nya19@fastmail.com"
+    target_email = "wg0@fastmail.com"
+    description = "desc..."
     
     print(f"📧 Alias email: {alias_email}")
     print(f"🎯 Target email: {target_email}")
