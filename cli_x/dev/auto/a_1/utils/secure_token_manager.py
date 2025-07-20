@@ -22,12 +22,16 @@ class SecureTokenManager:
         self.config_dir.mkdir(exist_ok=True)
         self.token_file = self.config_dir / "encrypted_token.json"
         
-    def get_yubikey_challenge(self, challenge="FastMail_Token_Key"):
+    def get_yubikey_challenge(self, challenge="fastmail"):
         """Get response from YubiKey using challenge-response"""
         try:
+            # Convert challenge to hex for YubiKey
+            import binascii
+            hex_challenge = binascii.hexlify(challenge.encode()).decode()
+            
             # Use ykman to get challenge-response (requires YubiKey with HMAC-SHA1)
             result = subprocess.run([
-                'ykman', 'otp', 'chalresp', '--touch', '2', challenge
+                'ykman', 'otp', 'calculate', '2', hex_challenge
             ], capture_output=True, text=True, timeout=30)
             
             if result.returncode == 0:
