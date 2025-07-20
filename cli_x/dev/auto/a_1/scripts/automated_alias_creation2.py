@@ -403,9 +403,23 @@ if __name__ == "__main__":
     print("🚀 Fastmail Automated Alias Creator")
     print("=" * 40)
     
-    # Hardcoded credentials for automatic login
-    USERNAME = "wg0"
-    PASSWORD = "ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK"
+    # Load credentials from environment variables
+    import os
+    from pathlib import Path
+    from dotenv import load_dotenv
+    
+    # Load environment variables
+    load_dotenv(Path(__file__).parent.parent.parent / ".env")  # Load from Y/.env
+    
+    USERNAME = os.getenv("FASTMAIL_USERNAME")
+    PASSWORD = os.getenv("FASTMAIL_PASSWORD")
+    
+    if not USERNAME or not PASSWORD:
+        print("❌ FastMail credentials not found in environment variables!")
+        print("Please create a .env file in the project root with:")
+        print("FASTMAIL_USERNAME=your_username")
+        print("FASTMAIL_PASSWORD=your_password")
+        exit(1)
     
     # Hardcoded alias details
     alias_email = "nya19@fastmail.com"

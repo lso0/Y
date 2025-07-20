@@ -6,11 +6,17 @@ Keeps browser session alive and proactively refreshes authentication
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 import json
 import time
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(Path(__file__).parent.parent.parent / ".env")  # Load from Y/.env
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -403,9 +409,17 @@ class PersistentSessionManager:
 # Example usage
 async def main():
     """Example usage of the persistent session manager"""
+    # Load credentials from environment
+    username = os.getenv("FASTMAIL_USERNAME")
+    password = os.getenv("FASTMAIL_PASSWORD")
+    
+    if not username or not password:
+        logger.error("❌ FastMail credentials not found in environment variables!")
+        return
+    
     manager = PersistentSessionManager(
-        username="wg0",
-        password="ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK",
+        username=username,
+        password=password,
         check_interval=30  # Check every 30 seconds
     )
     

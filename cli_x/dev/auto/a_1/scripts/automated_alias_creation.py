@@ -4,7 +4,7 @@ Automated Fastmail alias creation using Playwright
 This script will:
 1. Launch a browser
 2. Navigate to Fastmail
-3. Automatically log in with hardcoded credentials
+3. Automatically log in with credentials from environment variables
 4. Extract session data automatically
 5. Create the alias using the JMAP API
 """
@@ -13,9 +13,24 @@ from playwright.sync_api import sync_playwright
 import requests
 import json
 import time
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 
-def create_alias_with_playwright(alias_email, target_email, description="", username="wg0", password="ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK"):
+# Load environment variables
+load_dotenv(Path(__file__).parent.parent.parent / ".env")  # Load from Y/.env
+
+def create_alias_with_playwright(alias_email, target_email, description="", username=None, password=None):
     """Create an alias using Playwright to extract session data automatically"""
+    
+    # Use provided credentials or load from environment
+    username = username or os.getenv("FASTMAIL_USERNAME")
+    password = password or os.getenv("FASTMAIL_PASSWORD")
+    
+    if not username or not password:
+        print("❌ FastMail credentials not found!")
+        print("Please set FASTMAIL_USERNAME and FASTMAIL_PASSWORD environment variables")
+        return False
     
     with sync_playwright() as p:
         # Launch browser in headless mode for automation
@@ -403,9 +418,16 @@ if __name__ == "__main__":
     print("🚀 Fastmail Automated Alias Creator")
     print("=" * 40)
     
-    # Hardcoded credentials for automatic login
-    USERNAME = "wg0"
-    PASSWORD = "ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK"
+    # Load credentials from environment variables
+    USERNAME = os.getenv("FASTMAIL_USERNAME")
+    PASSWORD = os.getenv("FASTMAIL_PASSWORD")
+    
+    if not USERNAME or not PASSWORD:
+        print("❌ FastMail credentials not found in environment variables!")
+        print("Please create a .env file in the project root with:")
+        print("FASTMAIL_USERNAME=your_username")
+        print("FASTMAIL_PASSWORD=your_password")
+        exit(1)
     
     # Get alias details from command line or use defaults for testing
     import sys

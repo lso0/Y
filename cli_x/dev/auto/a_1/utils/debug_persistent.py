@@ -5,7 +5,12 @@ Debug script for persistent session and optimized alias creator
 
 import asyncio
 import sys
+import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(Path(__file__).parent.parent.parent / ".env")  # Load from Y/.env
 
 # Add utils to path
 sys.path.append(str(Path(__file__).parent))
@@ -21,11 +26,19 @@ except Exception as e:
 async def test_session_and_alias():
     """Test session manager and alias creation directly"""
     
+    # Load credentials from environment
+    username = os.getenv("FASTMAIL_USERNAME")
+    password = os.getenv("FASTMAIL_PASSWORD")
+    
+    if not username or password:
+        print("❌ FastMail credentials not found in environment variables!")
+        return
+    
     # Test 1: Create session manager
     print("🔍 Testing session manager...")
     manager = PersistentSessionManager(
-        username="wg0",
-        password="ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK",
+        username=username,
+        password=password,
         check_interval=60  # Longer interval for testing
     )
     

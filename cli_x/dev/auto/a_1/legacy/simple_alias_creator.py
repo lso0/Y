@@ -10,12 +10,25 @@ from playwright.async_api import async_playwright
 import requests
 import json
 import time
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(Path(__file__).parent.parent.parent / ".env")  # Load from Y/.env
 
 async def create_alias(alias_email, target_email, description=""):
     """Create alias using the working approach from automated_alias_creation.py"""
     
-    USERNAME = "wg0"
-    PASSWORD = "ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK"
+    USERNAME = os.getenv("FASTMAIL_USERNAME")
+    PASSWORD = os.getenv("FASTMAIL_PASSWORD")
+    
+    if not USERNAME or not PASSWORD:
+        print("❌ FastMail credentials not found in environment variables!")
+        print("Please create a .env file in the project root with:")
+        print("FASTMAIL_USERNAME=your_username")
+        print("FASTMAIL_PASSWORD=your_password")
+        return False
     
     async with async_playwright() as p:
         # Launch browser in headless mode

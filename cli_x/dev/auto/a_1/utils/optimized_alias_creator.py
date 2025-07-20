@@ -8,8 +8,14 @@ import asyncio
 import logging
 import requests
 import json
+import os
 from datetime import datetime
 from typing import Dict, Any
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(Path(__file__).parent.parent.parent / ".env")  # Load from Y/.env
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -232,10 +238,18 @@ async def demo():
     """Demo of optimized alias creation"""
     from persistent_session_manager import PersistentSessionManager
     
+    # Load credentials from environment
+    username = os.getenv("FASTMAIL_USERNAME")
+    password = os.getenv("FASTMAIL_PASSWORD")
+    
+    if not username or not password:
+        logger.error("❌ FastMail credentials not found in environment variables!")
+        return
+    
     # Start persistent session
     manager = PersistentSessionManager(
-        username="wg0",
-        password="ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK",
+        username=username,
+        password=password,
         check_interval=30
     )
     

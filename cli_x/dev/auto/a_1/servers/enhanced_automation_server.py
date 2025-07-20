@@ -15,6 +15,10 @@ import sys
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(Path(__file__).parent.parent.parent / ".env")  # Load from Y/.env
 
 # Import the working sync function
 sys.path.append(str(Path(__file__).parent.parent / "scripts"))
@@ -145,9 +149,17 @@ class BatchAliasResponse(BaseModel):
 server_start_time = datetime.now()
 active_tasks = {}
 
-# Hardcoded credentials (same as working script)
-USERNAME = "wg0"
-PASSWORD = "ZhkEVNW6nyUNFKvbuhQ2f!Csi@!dJK"
+# Load credentials from environment variables
+USERNAME = os.getenv("FASTMAIL_USERNAME")
+PASSWORD = os.getenv("FASTMAIL_PASSWORD")
+
+# Validate that credentials are loaded
+if not USERNAME or not PASSWORD:
+    logger.error("❌ FastMail credentials not found in environment variables!")
+    logger.error("Please create a .env file in the project root with:")
+    logger.error("FASTMAIL_USERNAME=your_username")
+    logger.error("FASTMAIL_PASSWORD=your_password")
+    sys.exit(1)
 
 @app.get("/")
 async def root():
