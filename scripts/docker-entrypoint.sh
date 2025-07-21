@@ -69,8 +69,8 @@ check_infisical_setup() {
     fi
     
     # Check if encrypted token file exists
-    if [ ! -f "/app/scripts/enc/encrypted_token.json" ]; then
-        print_warning "Encrypted token file not found at /app/scripts/enc/encrypted_token.json"
+    if [ ! -f "/app/scripts/enc/encrypted_tokens.json" ]; then
+        print_warning "Encrypted token file not found at /app/scripts/enc/encrypted_tokens.json"
         print_info "Secrets sync may not work without encrypted credentials"
         return 0
     fi
@@ -85,7 +85,7 @@ sync_secrets_if_needed() {
     if [ ! -f "/app/.env" ] || [ ! -s "/app/.env" ]; then
         print_info "No .env file found, checking if we can sync secrets..."
         
-        if [ -f "/app/scripts/enc/encrypted_token.json" ]; then
+        if [ -f "/app/scripts/enc/encrypted_tokens.json" ]; then
             print_info "Encrypted token found, but sync requires interactive password"
             print_info "Run: scripts/infisical/setup-infisical.sh sync"
         else
@@ -181,6 +181,32 @@ except Exception as e:
     fi
 }
 
+# Infisical Secrets Sync - Interactive
+secrets_sync() {
+    print_header "🔄 Infisical Secrets Sync (Interactive)"
+    
+    # Check for encrypted token file
+    if [ ! -f "/app/scripts/enc/encrypted_tokens.json" ]; then
+        print_warning "Encrypted tokens file not found at /app/scripts/enc/encrypted_tokens.json"
+        print_info "Please ensure your encrypted Infisical credentials are available"
+        print_info "You can create them with: scripts/infisical/update-token.py"
+        return 1
+    fi
+    
+    print_info "Found encrypted tokens file"
+    print_info "You will be prompted for your decryption password"
+    
+    # Run the secrets manager in interactive mode
+    python3 /app/scripts/infisical/secrets-manager.py
+}
+
+# Infisical Secrets Sync - Background  
+secrets_sync_background() {
+    print_header "🔄 Infisical Secrets Sync (Background)"
+    
+    # Check for encrypted token file
+    if [ -f "/app/scripts/enc/encrypted_tokens.json" ]; then
+
 # Main execution
 main() {
     # Set up environment
@@ -195,8 +221,8 @@ main() {
     case "${1:-help}" in
         help|--help|-h)
             show_help
-            ;;
-        shell)
+        ;;
+    shell)
             print_info "Starting interactive shell..."
             exec /bin/bash
             ;;
@@ -253,7 +279,7 @@ main() {
             print_info "Running system diagnostics..."
             if [ -f "/app/scripts/system-check.sh" ]; then
                 /app/scripts/system-check.sh
-            else
+        else
                 print_warning "System check script not found"
             fi
             ;;
@@ -262,8 +288,8 @@ main() {
             echo ""
             show_help
             exit 1
-            ;;
-    esac
+        ;;
+esac 
 }
 
 # Run main function

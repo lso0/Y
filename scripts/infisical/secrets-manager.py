@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
 """
 Infisical Secrets Manager - Streamlined Version
-Decrypts token, authenticates with Infisical, and extracts all secrets to .env file
+Handles decryption of encrypted tokens and secret management with Infisical
 """
 
-import os
 import sys
+import os
 import json
 import subprocess
-import base64
-import getpass
 from pathlib import Path
+from typing import Optional, Dict, Any
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import base64
+import getpass
+from datetime import datetime
 
 class InfisicalSecretsManager:
     def __init__(self):
-        self.project_root = Path("/Users/wgm0/Documents/Y")
+        # Simple approach: script is in scripts/infisical/, so project root is 2 levels up
+        script_path = Path(__file__).resolve()
+        self.project_root = script_path.parent.parent.parent
         self.env_file = self.project_root / ".env"
         self.infisical_config = self.project_root / ".infisical.json"
-        self.encrypted_token_file = self.project_root / "scripts" / "enc" / "encrypted_token.json"
-        
+        self.encrypted_tokens_file = self.project_root / "scripts" / "enc" / "encrypted_tokens.json"
+    
     def load_infisical_config(self):
         """Load Infisical workspace configuration (optional)"""
         try:
@@ -37,24 +41,103 @@ class InfisicalSecretsManager:
             print(f"⚠️ Could not load Infisical config (continuing anyway): {e}")
             return {"workspaceId": "default"}
     
+    def load_encrypted_tokens(self) -> Dict[str, Any]:
+        """Load the encrypted tokens file"""
+        try:
+            if not self.encrypted_tokens_file.exists():
+                return {}
+            
+            with open(self.encrypted_tokens_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"❌ Error loading encrypted tokens file: {e}")
+            return {}
+    
+    def save_encrypted_tokens(self, tokens_data: Dict[str, Any]) -> bool:
+        """Save the encrypted tokens file"""
+        try:
+            self.encrypted_tokens_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.encrypted_tokens_file, 'w') as f:
+                json.dump(tokens_data, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"❌ Error saving encrypted tokens file: {e}")
+            return False
+    
     def decrypt_token(self, password=None):
         """Decrypt the Infisical token from encrypted file"""
         try:
             print("🔓 Decrypting Infisical token...")
             
-            if not self.encrypted_token_file.exists():
-                print(f"❌ Encrypted token file not found: {self.encrypted_token_file}")
+            # Load encrypted tokens
+            encrypted_tokens = self.load_encrypted_tokens()
+            
+            if not encrypted_tokens:
+                print(f"❌ No encrypted tokens found in {self.encrypted_tokens_file}")
                 return None
             
-            # Load encrypted token file
-            with open(self.encrypted_token_file, 'r') as f:
-                encrypted_data = json.load(f)
+            # Look for Infisical token specifically
+            if "infisical" not in encrypted_tokens:
+                print("❌ No Infisical token found in encrypted tokens file")
+                available_keys = list(encrypted_tokens.keys())
+                print(f"Available services: {available_keys}")
+                return None
+                
+            encrypted_data = encrypted_tokens["infisical"]
             
+            # Check if this is a YubiKey-encrypted token
+            if encrypted_data.get("encryption_method") == "YubiKey_AES256_CBC":
+                print("🔐 Detected YubiKey-encrypted token")
+                return self._decrypt_yubikey_token(encrypted_data, password)
+            else:
+                print("🔓 Using standard decryption method")
+                return self._decrypt_standard_token(encrypted_data, password)
+            
+        except Exception as e:
+            print(f"❌ Token decryption failed: {e}")
+            return None
+    
+    def _decrypt_yubikey_token(self, encrypted_data, passcode=None):
+        """Decrypt YubiKey-encrypted token"""
+        try:
+            # Import YubiKey manager
+            import sys
+            sys.path.append(str(self.project_root / "scripts" / "enc"))
+            from yubikey_token_manager import YubiKeyTokenManager
+            
+            manager = YubiKeyTokenManager()
+            token = manager.decrypt_infisical_token(passcode, quiet=False)
+            
+            if not token:
+                return None
+            
+            # YubiKey manager returns raw token string, so we need to create the token structure
+            # Try to parse as JSON first (in case it's a complex token), otherwise treat as raw token
+            try:
+                return json.loads(token)
+            except json.JSONDecodeError:
+                # Raw token string - return as simple token structure
+                return {"token": token}
+            
+        except ImportError:
+            print("❌ YubiKey manager not available")
+            return None
+        except Exception as e:
+            print(f"❌ YubiKey decryption failed: {e}")
+            return None
+    
+    def _decrypt_standard_token(self, encrypted_data, password=None):
+        """Decrypt standard encrypted token"""
+        try:
             if password is None:
                 password = getpass.getpass("🔑 Enter decryption password: ")
             
-            # Derive key from password
-            salt = base64.b64decode(encrypted_data['salt'])
+            if not password:
+                print("❌ No password provided")
+                return None
+            
+            # Derive key from password and salt
+            salt = base64.b64decode(encrypted_data['salt'].encode())
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
                 length=32,
@@ -64,274 +147,208 @@ class InfisicalSecretsManager:
             key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
             
             # Decrypt the token
-            fernet = Fernet(key)
-            decrypted_data = fernet.decrypt(base64.b64decode(encrypted_data['encrypted_token']))
-            token_data = json.loads(decrypted_data.decode())
+            f = Fernet(key)
+            decrypted_data = f.decrypt(encrypted_data['encrypted_data'].encode())
+            token_info = json.loads(decrypted_data.decode())
             
             print("✅ Token decrypted successfully")
-            return token_data
+            return token_info
             
         except Exception as e:
-            print(f"❌ Token decryption failed: {e}")
+            print(f"❌ Standard decryption failed: {e}")
             return None
     
-    def authenticate_infisical(self, token_data):
-        """Authenticate with Infisical using decrypted credentials"""
-        try:
-            print("🔐 Authenticating with Infisical...")
-            
-            client_id = token_data.get('client_id')
-            client_secret = token_data.get('client_secret')
-            
-            if not client_id or not client_secret:
-                print("❌ Missing client_id or client_secret in token data")
-                return False
-            
-            # Set environment variables for Infisical CLI
-            env = os.environ.copy()
-            env['INFISICAL_CLIENT_ID'] = client_id
-            env['INFISICAL_CLIENT_SECRET'] = client_secret
-            
-            # Run Infisical authentication
-            result = subprocess.run([
-                "infisical", "auth", "universal-auth", 
-                "--client-id", client_id,
-                "--client-secret", client_secret
-            ], capture_output=True, text=True, cwd=str(self.project_root), env=env)
-            
-            if result.returncode == 0:
-                print("✅ Infisical authentication successful")
-                return True
-            else:
-                print(f"❌ Infisical authentication failed: {result.stderr}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Authentication error: {e}")
-            return False
-    
-    def get_all_secrets(self):
-        """Get all secrets from Infisical"""
-        try:
-            print("📦 Fetching all secrets from Infisical...")
-            
-            # Get secrets in JSON format
-            result = subprocess.run([
-                "infisical", "secrets", "get", "--format", "json"
-            ], capture_output=True, text=True, cwd=str(self.project_root))
-            
-            if result.returncode == 0:
-                secrets_data = json.loads(result.stdout)
-                print(f"✅ Retrieved {len(secrets_data)} secrets from Infisical")
-                return secrets_data
-            else:
-                print(f"❌ Failed to get secrets: {result.stderr}")
-                return None
-                
-        except Exception as e:
-            print(f"❌ Error fetching secrets: {e}")
-            return None
-    
-    def load_existing_env(self):
-        """Load existing .env file"""
-        existing_vars = {}
-        if self.env_file.exists():
-            try:
-                with open(self.env_file, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith('#') and '=' in line:
-                            key, value = line.split('=', 1)
-                            # Remove quotes if present
-                            value = value.strip("'\"")
-                            existing_vars[key] = value
-                print(f"📖 Loaded {len(existing_vars)} existing environment variables")
-            except Exception as e:
-                print(f"⚠️ Error reading existing .env: {e}")
-        return existing_vars
-    
-    def update_env_file(self, secrets_data):
-        """Update .env file with secrets from Infisical"""
-        try:
-            print("💾 Updating .env file...")
-            
-            # Load existing variables
-            existing_vars = self.load_existing_env()
-            
-            # Convert Infisical secrets to env format
-            infisical_vars = {}
-            for secret in secrets_data:
-                key = secret.get('secretKey')
-                value = secret.get('secretValue')
-                if key and value is not None:
-                    infisical_vars[key] = value
-            
-            print(f"🔄 Found {len(infisical_vars)} secrets from Infisical:")
-            for key in sorted(infisical_vars.keys()):
-                masked_value = infisical_vars[key][:3] + "***" if len(infisical_vars[key]) > 3 else "***"
-                print(f"  {key} = {masked_value}")
-            
-            # Merge with existing variables (Infisical takes precedence)
-            all_vars = {**existing_vars, **infisical_vars}
-            
-            # Create backup of existing .env
-            if self.env_file.exists():
-                backup_file = self.env_file.with_suffix('.env.backup')
-                subprocess.run(['cp', str(self.env_file), str(backup_file)])
-                print(f"📋 Created backup: {backup_file}")
-            
-            # Write updated .env file
-            with open(self.env_file, 'w') as f:
-                f.write("# Auto-generated .env file with Infisical secrets\n")
-                f.write(f"# Generated on: {subprocess.check_output(['date']).decode().strip()}\n")
-                f.write("# DO NOT EDIT MANUALLY - Use scripts/infisical/secrets-manager.py\n\n")
-                
-                # Group variables by prefix for better organization
-                grouped_vars = {}
-                for key, value in sorted(all_vars.items()):
-                    prefix = key.split('_')[0] if '_' in key else 'OTHER'
-                    if prefix not in grouped_vars:
-                        grouped_vars[prefix] = []
-                    grouped_vars[prefix].append((key, value))
-                
-                # Write grouped variables
-                for prefix in sorted(grouped_vars.keys()):
-                    f.write(f"# {prefix} Configuration\n")
-                    for key, value in grouped_vars[prefix]:
-                        # Quote values that contain special characters
-                        if any(c in value for c in [' ', '"', "'", '$', '`', '\\']):
-                            f.write(f"{key}='{value}'\n")
-                        else:
-                            f.write(f"{key}={value}\n")
-                    f.write("\n")
-            
-            print(f"✅ Updated .env file with {len(all_vars)} total variables")
-            print(f"📍 Location: {self.env_file}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ Failed to update .env file: {e}")
-            return False
-    
-    def show_status(self):
-        """Show current system status"""
-        print("📊 Current Status:")
+    def show_environment_status(self):
+        """Show current environment and system status"""
+        print("🔍 Environment Status Check")
+        print("=" * 30)
         
         # Check .env file
         if self.env_file.exists():
+            print(f"  📄 .env file: ✅ Found at {self.env_file}")
             try:
                 with open(self.env_file, 'r') as f:
-                    env_count = sum(1 for line in f if line.strip() and not line.startswith('#') and '=' in line)
-                env_date = "Unknown"
-                try:
-                    with open(self.env_file, 'r') as f:
-                        for line in f:
-                            if "Generated on:" in line:
-                                env_date = line.split("Generated on:")[1].strip()
-                                break
-                except:
-                    pass
-                print(f"  📁 .env file: ✅ Found ({env_count} variables, generated: {env_date})")
-            except:
-                print(f"  📁 .env file: ⚠️ Found but unreadable")
+                    line_count = len([line for line in f if line.strip() and not line.startswith('#')])
+                print(f"  📊 Variables: {line_count} environment variables")
+            except Exception:
+                print("  📊 Variables: Unable to count")
         else:
-            print(f"  📁 .env file: ❌ Not found")
+            print(f"  📄 .env file: ❌ Not found at {self.env_file}")
         
         # Check encrypted token
-        if self.encrypted_token_file.exists():
-            print(f"  🔐 Encrypted token: ✅ Found at {self.encrypted_token_file}")
+        if self.encrypted_tokens_file.exists():
+            print(f"  🔐 Encrypted token: ✅ Found at {self.encrypted_tokens_file}")
         else:
-            print(f"  🔐 Encrypted token: ❌ Not found at {self.encrypted_token_file}")
+            print(f"  🔐 Encrypted token: ❌ Not found at {self.encrypted_tokens_file}")
         
         # Check Infisical CLI
         try:
-            result = subprocess.run(['infisical', '--version'], capture_output=True, text=True)
+            result = subprocess.run(['infisical', '--version'], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 version = result.stdout.strip()
-                print(f"  🛠️  Infisical CLI: ✅ Installed ({version})")
+                print(f"  🔧 Infisical CLI: ✅ {version}")
             else:
-                print(f"  🛠️  Infisical CLI: ❌ Not working")
-        except:
-            print(f"  🛠️  Infisical CLI: ❌ Not installed")
+                print(f"  🔧 Infisical CLI: ❌ Error: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            print("  🔧 Infisical CLI: ❌ Timeout")
+        except FileNotFoundError:
+            print("  🔧 Infisical CLI: ❌ Not installed")
+        except Exception as e:
+            print(f"  🔧 Infisical CLI: ❌ Error: {e}")
         
         # Check Python dependencies
         try:
-            import cryptography
+            from cryptography.fernet import Fernet
             print(f"  🐍 Python cryptography: ✅ Available")
-        except:
+        except ImportError:
             print(f"  🐍 Python cryptography: ❌ Missing")
     
-    def run_full_sync(self, password=None):
-        """Run the complete secrets synchronization process"""
+    def sync_secrets(self):
+        """Main method to sync secrets from Infisical"""
         print("🚀 Starting Infisical Secrets Synchronization...")
         print("=" * 50)
         
         # Step 1: Load Infisical config (optional)
         config = self.load_infisical_config()
-        # Config is now always returned, so we continue regardless
+        if config.get("workspaceId"):
+            print("✅ .infisical.json config loaded")
+        else:
+            print("ℹ️ No .infisical.json config file found (optional)")
         
         # Step 2: Decrypt token
-        token_data = self.decrypt_token(password)
+        token_data = self.decrypt_token()
         if not token_data:
             return False
         
-        # Step 3: Authenticate with Infisical
-        if not self.authenticate_infisical(token_data):
+        # Step 3: Export secrets directly using token
+        if not self.export_secrets_with_token(token_data):
             return False
         
-        # Step 4: Get all secrets
-        secrets_data = self.get_all_secrets()
-        if secrets_data is None:
-            return False
-        
-        # Step 5: Update .env file
-        if not self.update_env_file(secrets_data):
-            return False
-        
-        print("=" * 50)
         print("🎉 Secrets synchronization completed successfully!")
-        print(f"📂 Secrets available in: {self.env_file}")
-        print("💡 Usage examples:")
-        print("   # Load secrets in current shell:")
-        print("   source .env")
-        print("   # Run YouTube automation:")
-        print("   python3 cli_x/dev/auto/services/youtube/scripts/youtube_automation_env.py")
-        
+        print(f"📄 Environment file created: {self.env_file}")
         return True
+    
+    def export_secrets_with_token(self, token_data):
+        """Export secrets directly using token (no login required)"""
+        try:
+            print("🔄 Exporting secrets from Infisical...")
+            
+            # Handle different token formats - extract the actual token
+            if isinstance(token_data, dict):
+                if "token" in token_data:
+                    # Simple token structure from YubiKey
+                    token = token_data["token"]
+                elif "client_secret" in token_data:
+                    # If it's client credentials, use client_secret as token
+                    token = token_data["client_secret"]
+                else:
+                    print("❌ Unknown token data format")
+                    return False
+            else:
+                # Raw token string
+                token = str(token_data)
+            
+            # Build infisical secrets command with direct token usage
+            infisical_cmd = [
+                'infisical', 'secrets',
+                '--projectId=13bce4c5-1ffc-478b-b1ce-76726074f358',
+                '--env=dev',
+                '--recursive',
+                '--domain=http://100.74.180.50',
+                f'--token={token}'
+            ]
+            
+            print("🚀 Running Infisical secrets export...")
+            
+            # Run command and capture output
+            result = subprocess.run(infisical_cmd, capture_output=True, text=True, cwd=str(self.project_root))
+            
+            if result.returncode == 0:
+                print("✅ Secrets exported successfully")
+                return self.parse_and_save_secrets(result.stdout)
+            else:
+                print(f"❌ Infisical secrets export failed: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Secrets export error: {e}")
+            return False
+    
+    def parse_and_save_secrets(self, secrets_output):
+        """Parse Infisical secrets output and save to .env file"""
+        try:
+            print("📝 Processing secrets...")
+            
+            # Parse the table output to extract key-value pairs
+            env_vars = {}
+            lines = secrets_output.strip().split('\n')
+            
+            # Find the table content (skip headers and separators)
+            in_table = False
+            for line in lines:
+                line = line.strip()
+                if '│ SECRET NAME │' in line:
+                    in_table = True
+                    continue
+                elif line.startswith('├─') or line.startswith('└─'):
+                    continue
+                elif in_table and line.startswith('│') and line.endswith('│'):
+                    # Parse table row: │ KEY │ VALUE │ TYPE │
+                    parts = [part.strip() for part in line.split('│') if part.strip()]
+                    if len(parts) >= 2:
+                        key = parts[0]
+                        value = parts[1]
+                        if key and value and key != 'SECRET NAME':
+                            env_vars[key] = value
+            
+            if not env_vars:
+                print("❌ No secrets found in output")
+                return False
+            
+            # Write to .env file
+            with open(self.env_file, 'w') as f:
+                f.write("# Infisical Environment Variables\n")
+                f.write(f"# Generated: {datetime.now().isoformat()}\n\n")
+                
+                for key, value in env_vars.items():
+                    # Escape quotes in values
+                    escaped_value = value.replace('"', '\\"')
+                    f.write(f'{key}="{escaped_value}"\n')
+            
+            print(f"✅ {len(env_vars)} secrets saved to {self.env_file}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error processing secrets: {e}")
+            return False
 
 def main():
-    """Main function"""
+    """Main entry point for the secrets manager"""
     manager = InfisicalSecretsManager()
     
-    # Handle command line arguments
     if len(sys.argv) > 1:
         if sys.argv[1] in ["--help", "-h"]:
-            print("Infisical Secrets Manager - Streamlined Version")
+            print("🔐 Infisical Secrets Manager")
             print("Usage:")
-            print("  python3 secrets-manager.py              # Interactive sync")
-            print("  python3 secrets-manager.py <password>   # Non-interactive sync")
-            print("  python3 secrets-manager.py --status     # Show system status")
-            print("  python3 secrets-manager.py --help       # Show this help")
+            print("  python secrets-manager.py               # Interactive mode")
+            print("  python secrets-manager.py --status      # Show status")
+            print("  python secrets-manager.py --help        # Show help")
             return
         elif sys.argv[1] in ["--status", "-s"]:
-            manager.show_status()
+            manager.show_environment_status()
             return
         else:
-            # Assume it's a password
-            password = sys.argv[1]
-            success = manager.run_full_sync(password)
+            print("❌ Unknown argument. Use --help for usage information.")
+            return
     else:
         # Interactive mode
-        success = manager.run_full_sync()
+        success = manager.sync_secrets()
     
     if success:
-        print("\n🎯 Next steps:")
-        print("1. Check the updated .env file: cat .env")
-        print("2. Run YouTube automation: python3 cli_x/dev/auto/services/youtube/scripts/youtube_automation_env.py")
+        print("\n🎉 Success!")
         sys.exit(0)
     else:
-        print("\n❌ Secrets synchronization failed")
+        print("\n❌ Failed!")
         sys.exit(1)
 
 if __name__ == "__main__":

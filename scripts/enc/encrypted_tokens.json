@@ -1,0 +1,18 @@
+{
+  "infisical": {
+    "encrypted_data": "dMNav2UFo9+p+6D3bbZeY3zS6F5Zj4c9Ra8pXsKjQK0S7lEq4h9sI5R8td90Wu/ulAvM7lsiy97hHRJsDpR01hMFs4tYJRJ3KpjILtTyMarD/x+Dos1b4cWdjl4nXA9d6Wu35w/LP9vXA9Rtutfu4Yt9HB48iNvYfZUHE5gIuebtxlnYl6ov7dTY9cTY3rMTEaeBpEoxatQHMaOJEyeR0VWgyOnig8fUIVz2bIgyVfOUjngWS6TGLVn+5d5znV/kfPjPwxxUkqXNjCBbpDC3kcoZ+pidHusb7LGn7b2MyH+1kfek9iqsVFxju87HCDp1lR9/uLTfHzMVcwDbaEKsRzy0GMoYdbv0/2cKI02LmiAdhbjDa6OG4ViO2YeJPHGFht5WXwjn8GdC0NFAu9J10CZtLkvwr18XB9bRUfSGqoDMJWB4AfEi/tikWZdtY38f",
+    "salt": "1Lf6ngDsJDYVQdubcH0pLg==",
+    "iv": "RsOtn0SdBGNqkZIOhx0Rsg==",
+    "created_at": "2025-07-21T12:37:44.910718",
+    "description": "Infisical credentials encrypted with YubiKey",
+    "encryption_method": "YubiKey_AES256_CBC"
+  },
+  "github": {
+    "encrypted_data": "DVTtQWUb/NGVwaGerG8iKrHaQcl6+7fcNVsan9b7bfAI53ldQdAwLdxhD3bzpxDYCDjdWKa5sOiO6BNM9n/rwTfYLxZYASVtIf8UROPFgXhNi9LYxMpxT9I/ikOUeBt987FYydvioPLl4DL+0MYP7MW1DJsqfWLaueWEj8mcyWIAvdfUOMxPVdccg9XYdYHaKDXttd0gjfJzOSLdEUQlllVh8u3ARkarytceTvBPjsoKlGdK/4BtY+x74sSPcSjz6GTzKMKqZLH5dmu6ff3+wbeDMeb9lud5LMg2Sg+bZF2okOaUrBXEgnk9rpQgzSGg19JX89r2+dvRNPhBdHY8b0icYM3tBrXLONHZmOtBp62qwTjxoIy+2xTlmia/sAgUoV2pkpaNvMFJ5nWWNbNV6Q2OxVcdudAQon3+DN3WBlAFUvioFw1HRHXUQe/i4PMX",
+    "salt": "3Sza7DfXWCfxuSTe6N8kaA==",
+    "iv": "8lVXGLCxkHiyv7M4eglmsQ==",
+    "created_at": "2025-07-21T12:48:56.442811",
+    "description": "Github credentials encrypted with YubiKey",
+    "encryption_method": "YubiKey_AES256_CBC"
+  }
+}

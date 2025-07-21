@@ -41,7 +41,7 @@ services:
       - TAILSCALE_IP=${TAILSCALE_IP:-}
       - TAILSCALE_ENABLED=${TAILSCALE_ENABLED:-false}
       - TAILSCALE_HOSTNAME=${TAILSCALE_HOSTNAME:-}
-    
+      
     # Use host networking for Tailscale connectivity on Linux
     network_mode: "${NETWORK_MODE:-bridge}"
     

@@ -1,36 +1,65 @@
 #!/usr/bin/env python3
 """
-Encrypted Token Updater
-Safely update Infisical credentials in the encrypted token file
+Infisical Token Updater - Streamlined Version
+Securely updates encrypted Infisical authentication tokens
 """
 
 import os
 import sys
 import json
-import base64
-import getpass
+import subprocess
 from pathlib import Path
+from typing import Optional, Dict, Any
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import base64
+import getpass
+from datetime import datetime
 
-class TokenUpdater:
+class InfisicalTokenUpdater:
     def __init__(self):
-        self.project_root = Path("/Users/wgm0/Documents/Y")
-        self.encrypted_token_file = self.project_root / "scripts" / "enc" / "encrypted_token.json"
-        
-    def decrypt_current_token(self, password):
-        """Decrypt the current token file"""
+        # Simple approach: script is in scripts/infisical/, so project root is 2 levels up
+        script_path = Path(__file__).resolve()
+        self.project_root = script_path.parent.parent.parent
+        self.encrypted_tokens_file = self.project_root / "scripts" / "enc" / "encrypted_tokens.json"
+    
+    def load_encrypted_tokens(self) -> Dict[str, Any]:
+        """Load existing encrypted tokens file"""
         try:
-            if not self.encrypted_token_file.exists():
-                print(f"❌ Encrypted token file not found: {self.encrypted_token_file}")
+            if not self.encrypted_tokens_file.exists():
+                return {}
+            
+            with open(self.encrypted_tokens_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"❌ Error loading encrypted tokens file: {e}")
+            return {}
+    
+    def save_encrypted_tokens(self, tokens_data: Dict[str, Any]) -> bool:
+        """Save the encrypted tokens file"""
+        try:
+            self.encrypted_tokens_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.encrypted_tokens_file, 'w') as f:
+                json.dump(tokens_data, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"❌ Error saving encrypted tokens file: {e}")
+            return False
+    
+    def decrypt_current_token(self, password):
+        """Decrypt current Infisical token if it exists"""
+        try:
+            encrypted_tokens = self.load_encrypted_tokens()
+            
+            if not encrypted_tokens or "infisical" not in encrypted_tokens:
+                print("ℹ️ No existing Infisical token found")
                 return None
             
-            with open(self.encrypted_token_file, 'r') as f:
-                encrypted_data = json.load(f)
+            encrypted_data = encrypted_tokens["infisical"]
             
-            # Derive key from password
-            salt = base64.b64decode(encrypted_data['salt'])
+            # Derive key from password and salt
+            salt = base64.b64decode(encrypted_data['salt'].encode())
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
                 length=32,
@@ -40,12 +69,12 @@ class TokenUpdater:
             key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
             
             # Decrypt the token
-            fernet = Fernet(key)
-            decrypted_data = fernet.decrypt(base64.b64decode(encrypted_data['encrypted_token']))
-            token_data = json.loads(decrypted_data.decode())
+            f = Fernet(key)
+            decrypted_data = f.decrypt(encrypted_data['encrypted_data'].encode())
+            token_info = json.loads(decrypted_data.decode())
             
             print("✅ Current token decrypted successfully")
-            return token_data
+            return token_info
             
         except Exception as e:
             print(f"❌ Failed to decrypt current token: {e}")
@@ -144,70 +173,86 @@ class TokenUpdater:
         }
     
     def update_token(self):
-        """Main update process"""
-        print("🔄 Encrypted Token Updater")
-        print("=" * 30)
+        """Update Infisical credentials in encrypted file"""
+        print("🔐 Infisical Token Updater - Streamlined Version")
+        print("=" * 50)
         
-        # Get current password
-        current_password = getpass.getpass("🔑 Enter current decryption password: ")
-        
-        # Decrypt current token
-        current_token = self.decrypt_current_token(current_password)
-        if not current_token:
+        # Get password for encryption
+        password = getpass.getpass("🔑 Enter encryption password: ")
+        if not password:
+            print("❌ No password provided")
             return False
         
-        # Show current credentials
-        self.show_current_credentials(current_token)
-        
-        # Ask what to update
-        print("What would you like to update?")
-        print("1. Update credentials (keep same password)")
-        print("2. Update credentials and change password")
-        print("3. Change password only")
-        print("4. Cancel")
-        
-        choice = input("Choose option (1-4): ").strip()
-        
-        if choice == "4":
-            print("❌ Update cancelled")
-            return False
-        
-        new_token_data = current_token.copy()
-        new_password = current_password
-        
-        # Update credentials if requested
-        if choice in ["1", "2"]:
-            new_credentials = self.get_new_credentials()
-            if not new_credentials:
-                return False
-            new_token_data.update(new_credentials)
-            print("✅ Credentials updated")
-        
-        # Update password if requested
-        if choice in ["2", "3"]:
-            new_password = getpass.getpass("🔐 Enter new decryption password: ")
-            confirm_password = getpass.getpass("🔐 Confirm new password: ")
+        # Try to decrypt existing token
+        existing_token = self.decrypt_current_token(password)
+        if existing_token:
+            print("📋 Current credentials found:")
+            print(f"  Client ID: {existing_token.get('client_id', 'N/A')[:8]}...")
+            print(f"  Workspace ID: {existing_token.get('workspace_id', 'N/A')}")
             
-            if new_password != confirm_password:
-                print("❌ Passwords do not match")
-                return False
+            update_choice = input("\n❓ Update existing credentials? (y/n): ").lower()
+            if update_choice != 'y':
+                print("ℹ️ Keeping existing credentials")
+                return True
+        
+        # Get new credentials
+        print("\n📝 Enter new Infisical credentials:")
+        client_id = input("Client ID: ").strip()
+        client_secret = getpass.getpass("Client Secret: ").strip()
+        workspace_id = input("Workspace ID: ").strip()
+        
+        if not all([client_id, client_secret, workspace_id]):
+            print("❌ All fields are required")
+            return False
+        
+        # Create token data
+        token_data = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "workspace_id": workspace_id,
+            "updated_at": datetime.now().isoformat()
+        }
+        
+        # Encrypt the token
+        try:
+            # Generate salt and derive key
+            salt = os.urandom(16)
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100000,
+            )
+            key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
             
-            print("✅ Password updated")
-        
-        # Encrypt with new data/password
-        encrypted_data = self.encrypt_new_token(new_token_data, new_password)
-        if not encrypted_data:
+            # Encrypt the data
+            f = Fernet(key)
+            encrypted_data = f.encrypt(json.dumps(token_data).encode())
+            
+            # Create the encrypted structure for Infisical
+            infisical_encrypted = {
+                "encrypted_data": encrypted_data.decode(),
+                "salt": base64.b64encode(salt).decode(),
+                "created_at": datetime.now().isoformat(),
+                "description": "Infisical project credentials"
+            }
+            
+            # Load existing tokens and update/add Infisical section
+            encrypted_tokens = self.load_encrypted_tokens()
+            encrypted_tokens["infisical"] = infisical_encrypted
+            
+            # Save the updated tokens file
+            if self.save_encrypted_tokens(encrypted_tokens):
+                print(f"✅ Infisical credentials encrypted and saved to: {self.encrypted_tokens_file}")
+                print("🔒 Your credentials are now securely stored")
+                return True
+            else:
+                print("❌ Failed to save encrypted tokens")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Encryption failed: {e}")
             return False
-        
-        # Save the updated token
-        if not self.save_encrypted_token(encrypted_data):
-            return False
-        
-        print("\n🎉 Token update completed successfully!")
-        print("💡 You can now use the updated credentials with:")
-        print("   scripts/infisical/setup-infisical.sh sync")
-        
-        return True
 
 def main():
     """Main function"""
@@ -218,7 +263,7 @@ def main():
         print("  python3 update-token.py --help       # Show this help")
         return
     
-    updater = TokenUpdater()
+    updater = InfisicalTokenUpdater()
     success = updater.update_token()
     
     if success:

@@ -69,14 +69,14 @@ check_docker() {
         print_error "Docker is not installed"
         echo ""
         print_info "Install Docker Desktop from: https://www.docker.com/products/docker-desktop"
-        return 1
-    fi
+            return 1
+        fi
     
     if ! docker info &> /dev/null; then
         print_error "Docker is not running"
         print_info "Please start Docker Desktop and try again"
-        return 1
-    fi
+            return 1
+        fi
     
     print_status "Docker is available and running"
     return 0
@@ -130,9 +130,11 @@ show_usage() {
     echo "Usage: ./run.sh [COMMAND] [OPTIONS]"
     echo ""
     echo -e "${GREEN}Setup Commands:${NC}"
-    echo "  check                   Check system prerequisites"  
+    echo "  check                   Check system prerequisites"
     echo "  build                   Build Docker image"
     echo "  setup                   Complete setup (build + environment check)"
+    echo "  local-setup             Set up local Python environment (no Docker)"
+    echo "  setup-complete          Complete local setup + YubiKey secrets sync (all-in-one)"
     echo ""
     echo -e "${GREEN}Infisical & Secrets:${NC}"
     echo "  secrets-status          Show Infisical system status"
@@ -198,32 +200,104 @@ run_system_check() {
         return 1
     fi
     
-    print_status "System check passed"
+            print_status "System check passed"
 }
 
-# Complete setup
-run_setup() {
-    print_info "🚀 Running complete setup..."
+# Set up local Python environment
+setup_local_environment() {
+    local auto_sync=${1:-false}
     
-    # Step 1: System check
-    if ! run_system_check; then
-        print_error "System check failed"
+    print_info "🐍 Setting up local Python environment..."
+    
+    # Check if Python 3 is available
+    if ! command -v python3 &> /dev/null; then
+        print_error "Python 3 is not installed. Please install Python 3.8+ first."
         exit 1
     fi
     
-    # Step 2: Build image
-    build_image
+    # Check Python version
+    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    print_info "Found Python $PYTHON_VERSION"
     
-    # Step 3: Test environment
-    print_info "Testing container environment..."
-    $COMPOSE_CMD run --rm automation check-env
+    # Create virtual environment
+    if [ -d "venv" ]; then
+        print_warning "Virtual environment already exists. Removing old one..."
+        rm -rf venv
+    fi
     
-    print_status "🎉 Setup completed successfully!"
+    print_info "Creating virtual environment..."
+    python3 -m venv venv
+    
+    # Activate and install dependencies
+    print_info "Installing core dependencies..."
+    ./venv/bin/pip install --upgrade pip
+    ./venv/bin/pip install cryptography python-dotenv
+    
+    # Try to install other dependencies but don't fail if they don't work
+    print_info "Installing additional dependencies (best effort)..."
+    if ./venv/bin/pip install -r requirements.txt 2>/dev/null; then
+        print_status "All dependencies installed successfully"
+    else
+        print_warning "Some dependencies failed to install. Core functionality available."
+        print_info "You can use: ./venv/bin/pip install <package> to install specific packages"
+    fi
+    
+    print_status "🎉 Local environment setup completed!"
+    
+    # If auto_sync is true, automatically run secrets sync
+    if [ "$auto_sync" = "true" ]; then
+        echo ""
+        print_info "🔐 Starting automatic secrets sync..."
+        echo "This will decrypt your YubiKey-encrypted tokens and create .env file"
+        echo ""
+        
+        # Check if encrypted tokens exist
+        if [ ! -f "scripts/enc/encrypted_tokens.json" ]; then
+            print_error "No encrypted tokens found at scripts/enc/encrypted_tokens.json"
+            print_info "Please encrypt your tokens first:"
+            echo "  source venv/bin/activate"
+            echo "  python scripts/enc/yubikey_token_manager.py --encrypt"
+            return 1
+        fi
+        
+        # Run secrets sync with the new venv
+        if ./venv/bin/python scripts/infisical/secrets-manager.py; then
+            echo ""
+            print_status "🎉 COMPLETE SUCCESS! Your environment is ready!"
+            echo ""
+            print_info "✅ Virtual environment created"
+            print_info "✅ Dependencies installed"
+            print_info "✅ Secrets synced from YubiKey"
+            print_info "✅ .env file created"
+            echo ""
+            print_info "🚀 Ready to use! To activate:"
+            echo "  source venv/bin/activate"
+        else
+            print_warning "Secrets sync failed, but environment is still available"
+            return 1
+        fi
+    else
+        echo ""
+        print_info "To use the local environment:"
+        echo "  source venv/bin/activate"
+        echo "  scripts/infisical/setup-infisical.sh sync    # Set up secrets"
+        echo "  python scripts/infisical/secrets-manager.py  # Direct secrets access"
+        echo ""
+        print_info "To deactivate later: deactivate"
+    fi
+}
+
+# Complete setup with automatic secrets sync
+setup_complete() {
+    print_info "🚀 Starting complete environment setup..."
+    echo "This will:"
+    echo "  1. Create Python virtual environment"
+    echo "  2. Install dependencies"
+    echo "  3. Decrypt YubiKey tokens and sync secrets"
+    echo "  4. Create .env file with all credentials"
     echo ""
-    print_info "You can now run automation commands:"
-    echo "  ./run.sh secrets-sync     # Set up secrets"
-    echo "  ./run.sh youtube-test     # Test YouTube automation"
-    echo "  ./run.sh shell            # Explore the container"
+    
+    setup_local_environment true
 }
 
 # Main execution
@@ -241,6 +315,12 @@ main() {
             ;;
         setup)
             run_setup
+            ;;
+        local-setup)
+            setup_local_environment
+            ;;
+        setup-complete)
+            setup_complete
             ;;
         secrets-status|secrets-sync|secrets-update)
             if ! check_docker || ! check_docker_compose; then

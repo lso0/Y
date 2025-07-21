@@ -25,9 +25,10 @@ if LOG_LEVEL == 'DEBUG':
     logging.getLogger("urllib3.connectionpool").setLevel(logging.DEBUG)
     logger.debug("Debug logging enabled - HTTP requests will be verbose")
 
-# Directory paths
-DB_DIR = "db"
-LOGS_DIR = "logs"
+# Directory paths - relative to script location
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_DIR = os.path.join(SCRIPT_DIR, "db")
+LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
 MAX_PROJECTS_PER_BATCH = 20  # Maximum number of projects to create in one batch
 RATE_LIMIT_DELAY = 1  # Delay between API calls in seconds
 MAX_CONCURRENT_ACCOUNTS = 3  # Maximum number of accounts to process concurrently

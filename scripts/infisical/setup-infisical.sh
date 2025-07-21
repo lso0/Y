@@ -11,11 +11,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Project paths
-PROJECT_ROOT="/Users/wgm0/Documents/Y"
+# Simple project paths - use script location to find project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SCRIPTS_DIR="$PROJECT_ROOT/scripts"
 INFISICAL_DIR="$SCRIPTS_DIR/infisical"
-ENCRYPTED_TOKEN_FILE="$SCRIPTS_DIR/enc/encrypted_token.json"
+ENCRYPTED_TOKENS_FILE="$SCRIPTS_DIR/enc/encrypted_tokens.json"
 ENV_FILE="$PROJECT_ROOT/.env"
 
 show_usage() {
@@ -32,57 +33,50 @@ show_usage() {
 
 setup_infisical() {
     echo -e "${BLUE}🚀 Setting up Infisical Secrets Management...${NC}"
-    echo "============================================="
-    
-    # Check if we're in the right directory
-    if [[ ! -f "$PROJECT_ROOT/.infisical.json" ]]; then
-        echo -e "${RED}❌ Not in project root directory (missing .infisical.json)${NC}"
-        echo "Please ensure you're running from the correct location"
-        exit 1
-    fi
-    
-    # Check if Infisical CLI is installed
-    if ! command -v infisical &> /dev/null; then
+echo "============================================="
+
+# Check if Infisical CLI is installed
+if ! command -v infisical &> /dev/null; then
         echo -e "${YELLOW}📦 Installing Infisical CLI...${NC}"
-        
-        # Install Infisical CLI for macOS
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            if command -v brew &> /dev/null; then
-                brew install infisical
-            else
-                echo -e "${RED}❌ Homebrew not found. Please install Homebrew first:${NC}"
-                echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-                exit 1
-            fi
+    
+    # Install Infisical CLI for macOS
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if command -v brew &> /dev/null; then
+            brew install infisical
         else
-            echo -e "${RED}❌ This setup script is designed for macOS. Please install Infisical CLI manually:${NC}"
-            echo "   https://infisical.com/docs/cli/overview"
+                echo -e "${RED}❌ Homebrew not found. Please install Homebrew first:${NC}"
+            echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
             exit 1
         fi
     else
+            echo -e "${RED}❌ This setup script is designed for macOS. Please install Infisical CLI manually:${NC}"
+        echo "   https://infisical.com/docs/cli/overview"
+        exit 1
+    fi
+else
         echo -e "${GREEN}✅ Infisical CLI already installed${NC}"
-    fi
-    
-    # Check Python dependencies
+fi
+
+# Check Python dependencies
     echo -e "${YELLOW}🐍 Checking Python dependencies...${NC}"
-    
-    # Check if cryptography is installed
-    if ! python3 -c "import cryptography" 2>/dev/null; then
+
+# Check if cryptography is installed
+if ! python3 -c "import cryptography" 2>/dev/null; then
         echo -e "${YELLOW}📦 Installing cryptography library...${NC}"
-        pip3 install cryptography
-    else
+    pip3 install cryptography
+else
         echo -e "${GREEN}✅ cryptography library already installed${NC}"
-    fi
-    
-    # Check if encrypted token file exists
-    if [[ ! -f "$ENCRYPTED_TOKEN_FILE" ]]; then
-        echo -e "${YELLOW}⚠️  Encrypted token file not found: $ENCRYPTED_TOKEN_FILE${NC}"
+fi
+
+# Check if encrypted token file exists
+if [[ ! -f "$ENCRYPTED_TOKENS_FILE" ]]; then
+        echo -e "${YELLOW}⚠️  Encrypted token file not found: $ENCRYPTED_TOKENS_FILE${NC}"
         echo "Please ensure you have moved the encrypted token file to the new location."
-    else
+else
         echo -e "${GREEN}✅ Encrypted token file found${NC}"
-    fi
-    
-    # Make the secrets manager executable
+fi
+
+# Make the secrets manager executable
     chmod +x "$INFISICAL_DIR/secrets-manager.py"
     
     echo ""
@@ -121,11 +115,6 @@ sync_secrets() {
     echo "========================="
     
     # Check prerequisites
-    if [[ ! -f "$PROJECT_ROOT/.infisical.json" ]]; then
-        echo -e "${RED}❌ Not in project root directory${NC}"
-        exit 1
-    fi
-    
     if [[ ! -f "$INFISICAL_DIR/secrets-manager.py" ]]; then
         echo -e "${RED}❌ secrets-manager.py not found${NC}"
         echo "Please run: $0 setup"
@@ -140,8 +129,8 @@ sync_secrets() {
     else
         echo "  No .env file exists"
     fi
-    
-    echo ""
+
+echo ""
     
     # Run the secrets manager
     cd "$PROJECT_ROOT"
@@ -156,7 +145,7 @@ sync_secrets() {
         sync_result=$?
     fi
     
-    echo ""
+echo ""
     
     # Check sync result
     if [[ $sync_result -eq 0 ]]; then
@@ -176,11 +165,11 @@ sync_secrets() {
             done
         fi
         
-        echo ""
+echo ""
         echo -e "${BLUE}💡 Quick usage examples:${NC}"
         echo "  # Check secrets:"
         echo "  cat .env"
-        echo ""
+echo ""
         echo "  # Run YouTube automation:"
         echo "  python3 cli_x/dev/auto/services/youtube/scripts/youtube_automation_env.py"
         
@@ -190,7 +179,7 @@ sync_secrets() {
         echo "1. Verify your decryption password"
         echo "2. Check Infisical authentication"
         echo "3. Ensure all prerequisites are met"
-        echo ""
+echo ""
         echo "For help, run: $0 help"
         exit 1
     fi
@@ -213,8 +202,8 @@ case "${1:-help}" in
     update-token)
         echo -e "${BLUE}🔄 Updating encrypted Infisical credentials...${NC}"
         echo "============================================="
-        if [[ ! -f "$ENCRYPTED_TOKEN_FILE" ]]; then
-            echo -e "${YELLOW}⚠️  Encrypted token file not found: $ENCRYPTED_TOKEN_FILE${NC}"
+        if [[ ! -f "$ENCRYPTED_TOKENS_FILE" ]]; then
+            echo -e "${YELLOW}⚠️  Encrypted token file not found: $ENCRYPTED_TOKENS_FILE${NC}"
             echo "Please ensure you have moved the encrypted token file to the new location."
             exit 1
         fi
@@ -227,7 +216,7 @@ case "${1:-help}" in
         ;;
     *)
         echo -e "${RED}❌ Unknown command: $1${NC}"
-        echo ""
+echo ""
         show_usage
         exit 1
         ;;

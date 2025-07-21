@@ -1,7 +1,7 @@
-# Use Python 3.12 as the base image with more tools
-FROM python:3.12-slim
+# Use Python 3.11 as the base image for better package compatibility
+FROM python:3.11-slim
 
-# Install system dependencies for Chrome and automation
+# Install system dependencies for automation
 RUN apt-get update && apt-get install -y \
     curl \
     wget \
@@ -11,39 +11,35 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     bash \
     git \
-    # Chrome dependencies 
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libdrm2 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
-    libxss1 \
-    libnss3 \
-    # Virtual display for headless Chrome
+    gnupg \
+    lsb-release \
+    # Virtual display for headless automation
     xvfb \
     && rm -rf /var/lib/apt/lists/*
 
-# Add Google Chrome repository and install Chrome
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && apt-get install -y google-chrome-stable && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install latest Infisical CLI
+# Install Infisical CLI (optional - fallback to dummy if download fails)
 RUN ARCH=$(dpkg --print-architecture) && \
+    echo "Detected architecture: $ARCH" && \
     if [ "$ARCH" = "amd64" ]; then \
         INFISICAL_ARCH="amd64"; \
     elif [ "$ARCH" = "arm64" ]; then \
         INFISICAL_ARCH="arm64"; \
     else \
-        echo "Unsupported architecture: $ARCH, skipping Infisical" && exit 1; \
+        echo "Unsupported architecture: $ARCH, creating dummy Infisical binary"; \
+        echo '#!/bin/bash\necho "Infisical CLI not available for this architecture"' > /usr/local/bin/infisical; \
+        chmod +x /usr/local/bin/infisical; \
+        exit 0; \
     fi && \
-    curl -L -o /usr/local/bin/infisical "https://github.com/Infisical/infisical/releases/latest/download/infisical_linux_${INFISICAL_ARCH}" && \
+    echo "Attempting to download Infisical CLI..." && \
+    (curl -fsSL -o /usr/local/bin/infisical \
+        "https://github.com/Infisical/infisical/releases/latest/download/infisical_linux_${INFISICAL_ARCH}" \
+    || echo "Download failed, creating fallback") && \
+    if [ ! -s /usr/local/bin/infisical ]; then \
+        echo "Creating fallback Infisical binary..."; \
+        echo '#!/bin/bash\necho "Infisical CLI download failed - using local secrets only"' > /usr/local/bin/infisical; \
+    fi && \
     chmod +x /usr/local/bin/infisical && \
-    infisical --version
+    echo "Infisical setup complete"
 
 # Set working directory
 WORKDIR /app

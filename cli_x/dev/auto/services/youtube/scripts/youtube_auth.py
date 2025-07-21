@@ -64,7 +64,7 @@ class YouTubeAutomator:
         except Exception as e:
             logger.error(f"❌ Failed to take screenshot {name}: {e}")
             return ""
-
+    
     async def start_browser(self) -> bool:
         """Start undetected Chrome browser"""
         try:
