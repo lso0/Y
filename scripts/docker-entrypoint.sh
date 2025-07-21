@@ -243,8 +243,8 @@ main() {
             ;;
         tailscale-check)
             print_info "Running Tailscale connectivity check..."
-            if [ -f "/app/scripts/tailscale-check.sh" ]; then
-                /app/scripts/tailscale-check.sh
+            if [ -f "/app/scripts/tailscale/tailscale-check.sh" ]; then
+                /app/scripts/tailscale/tailscale-check.sh
             else
                 print_warning "Tailscale check script not found"
             fi
