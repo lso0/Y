@@ -26,8 +26,8 @@ python-dotenv==1.0.0
 # Security - YubiKey Token Management
 cryptography==41.0.7
 
-# Image processing
-pillow==10.1.0
+# Image processing - updated for Python 3.13 compatibility
+pillow>=10.2.0
 
 # Async file operations
 aiofiles==23.2.0
