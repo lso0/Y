@@ -1,0 +1,16 @@
+# YouTube Automation Dependencies
+nodriver==0.34
+selenium-stealth==1.0.6
+fake-useragent==1.4.0
+requests==2.31.0
+beautifulsoup4==4.12.2
+python-dotenv==1.0.0
+
+# Server components (shared with main requirements)
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+
+# Utility libraries
+pillow==10.1.0
+aiofiles==23.2.0 
