@@ -1,22 +1,37 @@
 services:
-  rc-automation:
+  automation:
     build: 
       context: .
       dockerfile: Dockerfile
     volumes:
       # Mount the entire project for development
       - .:/app
-      # Persistent storage for logs
-      - ./RC/logs:/app/RC/logs
-      # Persistent storage for configuration
-      - ./config:/app/config
+      # Persistent storage for logs and screenshots
+      - ./logs:/app/logs
+      - ./cli_x/dev/auto/services/youtube/data:/app/cli_x/dev/auto/services/youtube/data
+      # Mount encrypted tokens
+      - ./scripts/enc:/app/scripts/enc
     env_file:
       - .env
     environment:
+      # Core Configuration
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=:99
+      
       # Infisical Configuration
       - INFISICAL_TOKEN=${INFISICAL_TOKEN:-}
       
-      # RC Automation Variables
+      # YouTube Automation
+      - G_LSD_M_0=${G_LSD_M_0:-}
+      - G_LSD_P_0=${G_LSD_P_0:-}
+      
+      # Fastmail Automation
+      - FM_API_0=${FM_API_0:-}
+      - FM_M_0=${FM_M_0:-}
+      - FM_P_0=${FM_P_0:-}
+      
+      # RC Automation
       - RC_E_1=${RC_E_1:-}
       - RC_P_1=${RC_P_1:-}
       - RC_E_2=${RC_E_2:-}
@@ -26,17 +41,13 @@ services:
       - TAILSCALE_IP=${TAILSCALE_IP:-}
       - TAILSCALE_ENABLED=${TAILSCALE_ENABLED:-false}
       - TAILSCALE_HOSTNAME=${TAILSCALE_HOSTNAME:-}
-      
-      # Container Configuration
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
     
-    # Use host networking for Tailscale connectivity (Linux only)
+    # Use host networking for Tailscale connectivity on Linux
     network_mode: "${NETWORK_MODE:-bridge}"
     
     # Interactive mode for shell access
     stdin_open: true
     tty: true
     
-    # Override default entrypoint when needed
+    # Override default command when needed
     # command: ["help"]  # Uncomment to see help by default 

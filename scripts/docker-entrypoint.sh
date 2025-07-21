@@ -26,190 +26,245 @@ print_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
 }
 
-# Function to check if Infisical is authenticated
-check_infisical_auth() {
-    # Check if we have a real Infisical CLI
-    if ! infisical --version 2>/dev/null | grep -q "infisical version"; then
-        print_warning "Using fallback Infisical - skipping authentication check"
-        return 0
-    fi
+# Function to set up virtual display for headless Chrome
+setup_virtual_display() {
+    print_info "Setting up virtual display for headless Chrome..."
     
-    if [ -z "$INFISICAL_TOKEN" ]; then
-        print_error "INFISICAL_TOKEN environment variable is not set"
-        print_info "Please set your Infisical token in the .env file or docker-compose.yml"
-        return 1
-    fi
-    
-    # Test authentication by trying to fetch secrets
-    if timeout 5 infisical export --projectId="13bce4c5-1ffc-478b-b1ce-76726074f358" --env="dev" --format=dotenv --silent >/dev/null 2>&1; then
-        print_status "Infisical authentication verified"
-        return 0
+    # Start Xvfb if not running
+    if ! pgrep -f Xvfb > /dev/null; then
+        Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
+        export DISPLAY=:99
+        sleep 2
+        print_status "Virtual display started on :99"
     else
-        print_error "Infisical authentication failed"
-        print_info "Please check your INFISICAL_TOKEN in the .env file"
-        return 1
+        print_info "Virtual display already running"
     fi
 }
 
-# Function to setup environment
-setup_environment() {
-    print_info "Setting up containerized environment..."
+# Function to check environment setup
+check_environment() {
+    print_info "Checking environment setup..."
     
-    # Check if we have a real Infisical CLI or fallback
-    if infisical --version 2>/dev/null | grep -q "infisical version"; then
-        print_info "Using real Infisical CLI..."
-        # Check Infisical authentication
-        if ! check_infisical_auth; then
-            print_error "Cannot proceed without valid Infisical authentication"
-            exit 1
-        fi
+    # Check if we're in a virtual environment
+    if [[ -n "$VIRTUAL_ENV" ]] || [[ "$PATH" == *"/venv/bin:"* ]]; then
+        print_status "Virtual environment active"
+    else
+        print_warning "Virtual environment not detected, activating..."
+        export PATH="/app/venv/bin:$PATH"
+    fi
+    
+    # Check Python environment
+    python --version
+    print_status "Python environment ready"
+}
+
+# Function to check Infisical setup
+check_infisical_setup() {
+    print_info "Checking Infisical setup..."
+    
+    # Check if Infisical CLI is available
+    if ! command -v infisical &> /dev/null; then
+        print_error "Infisical CLI not found"
+        return 1
+    fi
+    
+    # Check if encrypted token file exists
+    if [ ! -f "/app/scripts/enc/encrypted_token.json" ]; then
+        print_warning "Encrypted token file not found at /app/scripts/enc/encrypted_token.json"
+        print_info "Secrets sync may not work without encrypted credentials"
+        return 0
+    fi
+    
+    print_status "Infisical setup ready"
+    return 0
+}
+
+# Function to sync secrets if needed
+sync_secrets_if_needed() {
+    # Check if .env file exists and has content
+    if [ ! -f "/app/.env" ] || [ ! -s "/app/.env" ]; then
+        print_info "No .env file found, checking if we can sync secrets..."
         
-        # Fetch secrets from Infisical
-        print_info "Fetching secrets from Infisical..."
-        if infisical export --projectId="13bce4c5-1ffc-478b-b1ce-76726074f358" --env="dev" --format=dotenv > /app/.env.secrets; then
-            print_status "Secrets fetched successfully"
+        if [ -f "/app/scripts/enc/encrypted_token.json" ]; then
+            print_info "Encrypted token found, but sync requires interactive password"
+            print_info "Run: scripts/infisical/setup-infisical.sh sync"
         else
-            print_error "Failed to fetch secrets from Infisical"
-            exit 1
+            print_warning "No encrypted token file found"
+            print_info "Set up Infisical credentials first"
         fi
     else
-        print_warning "Using fallback Infisical - will use environment variables from .env"
-        # Use fallback - create .env.secrets from current environment
-        print_info "Creating environment file from current variables..."
-        infisical export > /app/.env.secrets 2>/dev/null || {
-            echo "# Environment variables from docker-compose" > /app/.env.secrets
-            echo "RC_E_1=${RC_E_1:-}" >> /app/.env.secrets  
-            echo "RC_P_1=${RC_P_1:-}" >> /app/.env.secrets
-            echo "RC_E_2=${RC_E_2:-}" >> /app/.env.secrets
-            echo "RC_P_2=${RC_P_2:-}" >> /app/.env.secrets
-        }
-        print_status "Environment file created from current variables"
-    fi
-    
-    # Handle Tailscale configuration
-    if [ -f "/app/.env.tailscale" ]; then
-        print_info "Adding Tailscale configuration..."
-        echo "" >> /app/.env.secrets
-        echo "# Tailscale Configuration" >> /app/.env.secrets
-        cat /app/.env.tailscale >> /app/.env.secrets
-        print_status "Tailscale configuration added"
-    fi
-    
-    # Copy final environment file to root directory (RC will access from there)
-    cp /app/.env.secrets /app/.env
-    
-    print_status "Environment setup complete!"
-}
-
-# Function to run RC automation
-run_rc_automation() {
-    print_info "Running RC automation with arguments: $*"
-    
-    # Check for debug/verbose flags in arguments
-    DEBUG_MODE=false
-    for arg in "$@"; do
-        if [[ "$arg" == "--debug" || "$arg" == "-d" || "$arg" == "--verbose" || "$arg" == "-v" ]]; then
-            DEBUG_MODE=true
-            break
-        fi
-    done
-    
-    # Set LOG_LEVEL environment variable if debug mode is enabled
-    if [ "$DEBUG_MODE" = true ]; then
-        export LOG_LEVEL=DEBUG
-        print_info "🐛 Debug mode enabled - verbose HTTP logging will be shown"
-    fi
-    
-    # Ensure environment is set up
-    if [ ! -f "/app/.env" ]; then
-        print_warning "Environment not set up, running setup first..."
-        setup_environment
-    fi
-    
-    # Load environment variables
-    set -a
-    source /app/.env
-    set +a
-    
-    # Change to RC directory and run the automation
-    cd /app/RC
-    
-    if [ $# -eq 0 ]; then
-        print_info "Running RC automation with default parameters..."
-        python rc_a.py
-    else
-        print_info "Running RC automation with arguments: $*"
-        python rc_a.py "$@"
+        print_status ".env file exists"
     fi
 }
 
 # Function to show help
 show_help() {
-    echo -e "${BLUE}🐳 Containerized RC Automation${NC}"
+    echo -e "${BLUE}🚀 Streamlined Automation Container${NC}"
     echo ""
-    echo "Usage: docker-compose run --rm rc-automation [COMMAND] [OPTIONS]"
+    echo "Available commands:"
     echo ""
-    echo -e "${GREEN}Commands:${NC}"
-    echo "  setup                    Setup environment and fetch secrets"
-    echo "  run [args...]           Run RC automation with optional arguments"
-    echo "  shell                   Open interactive shell in container"
-    echo "  help                    Show this help message"
+    echo -e "${GREEN}Infisical & Secrets:${NC}"
+    echo "  secrets-status           Show Infisical system status"
+    echo "  secrets-sync             Sync secrets from Infisical (interactive)"
+    echo "  secrets-update           Update encrypted Infisical credentials"
     echo ""
-    echo -e "${GREEN}RC Automation Arguments:${NC}"
-    echo "  -a, --accounts A1 A2    Account identifiers (required)"
-    echo "  -x, --action ACTION     Action: c_p (create), d_p (delete), l_p (list)"
-    echo "  -p, --projects P1 P2    Project names (required for create/delete)"
-    echo "  -d, --debug             Enable verbose debug logging"
-    echo "  -v, --verbose           Enable verbose debug logging (same as --debug)"
+    echo -e "${GREEN}YouTube Automation:${NC}"
+    echo "  youtube-test             Test YouTube automation with consent handling"
+    echo "  youtube-run [channel]    Run YouTube automation (uses .env credentials)"
+    echo ""
+    echo -e "${GREEN}System Commands:${NC}"
+    echo "  shell                    Open interactive shell"
+    echo "  test-chrome              Test Chrome setup in container"
+    echo "  check-env                Check environment and dependencies"
+    echo ""
+    echo -e "${GREEN}Legacy Commands:${NC}"
+    echo "  tailscale-check          Check Tailscale connectivity"
+    echo "  system-check             Run system diagnostics"
     echo ""
     echo -e "${GREEN}Examples:${NC}"
-    echo "  docker-compose run --rm rc-automation setup"
-    echo "  docker-compose run --rm rc-automation run -a A1 A2 -x c_p -p proj1 proj2"
-    echo "  docker-compose run --rm rc-automation run -a A1 -x c_p -p proj1 --debug"
-    echo "  docker-compose run --rm rc-automation run -a A1 -x l_p"
-    echo "  docker-compose run --rm rc-automation shell"
-    echo ""
-    echo -e "${GREEN}Environment Variables:${NC}"
-    echo "  INFISICAL_TOKEN         Your Infisical authentication token"
-    echo "  RC_E_1, RC_P_1          RevenueCat account 1 email and password"
-    echo "  RC_E_2, RC_P_2          RevenueCat account 2 email and password"
-    echo "  LOG_LEVEL               Set to DEBUG for verbose logging"
-    echo "  TAILSCALE_IP           Tailscale IP address (optional)"
-    echo "  TAILSCALE_ENABLED      Enable Tailscale features (optional)"
-    echo "  TAILSCALE_HOSTNAME     Tailscale hostname (optional)"
-    echo ""
-    echo -e "${YELLOW}Debug Mode:${NC} Use --debug or --verbose for detailed HTTP logging"
-    echo -e "${YELLOW}Note:${NC} Make sure to set your INFISICAL_TOKEN and RC_E_*/RC_P_* in .env file"
+    echo "  docker-compose run --rm automation secrets-status"
+    echo "  docker-compose run --rm automation youtube-test"
+    echo "  docker-compose run --rm automation shell"
 }
 
-# Function to open interactive shell
-open_shell() {
-    print_info "Opening interactive shell..."
-    exec /bin/bash
+# Function to test Chrome setup
+test_chrome_setup() {
+    print_info "Testing Chrome setup in container..."
+    
+    setup_virtual_display
+    
+    # Check if Chrome is installed
+    if ! command -v google-chrome &> /dev/null; then
+        print_error "Google Chrome not found"
+        return 1
+    fi
+    
+    # Test Chrome startup
+    if google-chrome --version > /dev/null 2>&1; then
+        chrome_version=$(google-chrome --version)
+        print_status "Chrome is working: $chrome_version"
+    else
+        print_error "Chrome failed to start"
+        return 1
+    fi
+    
+    # Test headless Chrome with a simple page
+    print_info "Testing headless Chrome navigation..."
+    if python3 -c "
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+
+options = Options()
+options.add_argument('--no-sandbox')
+options.add_argument('--disable-dev-shm-usage')
+options.add_argument('--disable-gpu')
+options.add_argument('--headless')
+options.binary_location = '/usr/bin/google-chrome'
+
+try:
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    driver.get('https://www.google.com')
+    title = driver.title
+    driver.quit()
+    print(f'✅ Successfully loaded: {title}')
+except Exception as e:
+    print(f'❌ Chrome test failed: {e}')
+    exit(1)
+"; then
+        print_status "Chrome automation test passed"
+    else
+        print_error "Chrome automation test failed"
+        return 1
+    fi
 }
 
-# Main execution logic
-case "$1" in
-    setup)
-        setup_environment
-        ;;
-    run)
-        shift
-        run_rc_automation "$@"
-        ;;
-    shell)
-        open_shell
-        ;;
-    help)
-        show_help
-        ;;
-    *)
-        if [ "$1" = "help" ] || [ -z "$1" ]; then
+# Main execution
+main() {
+    # Set up environment
+    check_environment
+    
+    # Set up virtual display for GUI applications
+    setup_virtual_display
+    
+    # Check Infisical setup
+    check_infisical_setup
+    
+    case "${1:-help}" in
+        help|--help|-h)
             show_help
-        else
-            print_warning "Unknown command: $1"
+            ;;
+        shell)
+            print_info "Starting interactive shell..."
+            exec /bin/bash
+            ;;
+        secrets-status)
+            print_info "Checking Infisical system status..."
+            python3 /app/scripts/infisical/secrets-manager.py --status
+            ;;
+        secrets-sync)
+            print_info "Starting interactive secrets sync..."
+            /app/scripts/infisical/setup-infisical.sh sync
+            ;;
+        secrets-update)
+            print_info "Starting encrypted token update..."
+            python3 /app/scripts/infisical/update-token.py
+            ;;
+        youtube-test)
+            print_info "Testing YouTube automation..."
+            cd /app
+            python3 cli_x/dev/auto/services/youtube/scripts/selenium_consent_fixed.py
+            ;;
+        youtube-run)
+            print_info "Running YouTube automation..."
+            cd /app
+            if [ -n "$2" ]; then
+                python3 cli_x/dev/auto/services/youtube/scripts/youtube_automation_env.py "$2"
+            else
+                python3 cli_x/dev/auto/services/youtube/scripts/youtube_automation_env.py
+            fi
+            ;;
+        test-chrome)
+            test_chrome_setup
+            ;;
+        check-env)
+            print_info "Checking environment and dependencies..."
+            check_environment
+            check_infisical_setup
+            if command -v google-chrome &> /dev/null; then
+                print_status "Google Chrome: $(google-chrome --version)"
+            else
+                print_error "Google Chrome not found"
+            fi
+            python3 --version
+            pip list | grep -E "(selenium|cryptography|nodriver)" || print_warning "Some automation packages not found"
+            ;;
+        tailscale-check)
+            print_info "Running Tailscale connectivity check..."
+            if [ -f "/app/scripts/tailscale-check.sh" ]; then
+                /app/scripts/tailscale-check.sh
+            else
+                print_warning "Tailscale check script not found"
+            fi
+            ;;
+        system-check)
+            print_info "Running system diagnostics..."
+            if [ -f "/app/scripts/system-check.sh" ]; then
+                /app/scripts/system-check.sh
+            else
+                print_warning "System check script not found"
+            fi
+            ;;
+        *)
+            print_error "Unknown command: $1"
+            echo ""
             show_help
             exit 1
-        fi
-        ;;
-esac 
+            ;;
+    esac
+}
+
+# Run main function
+main "$@" 
