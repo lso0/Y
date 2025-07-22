@@ -112,6 +112,22 @@ type model struct {
 	// Finance sorting state
 	sortMode     int  // 0=unsorted, 1=date, 2=monthly price, 3=yearly price
 	showSortMenu bool // Whether to show sorting options
+
+	// AI Analytics system
+	analytics *FinanceAnalytics
+
+	// AI Insights display
+	showAIInsights  bool
+	currentInsights *FinanceInsights
+
+	// Email analytics and mailbox management
+	emailAnalytics *EmailAnalytics
+	currentMailbox string // "inbox", "spam", "trash"
+
+	// Auto-clearing notification system
+	notificationTimer *time.Timer
+	notificationText  string
+	showNotification  bool
 }
 
 var (
@@ -225,13 +241,25 @@ var (
 				Foreground(lipgloss.Color("#6B7280")).
 				Italic(true)
 
-	// Recurrence indicator styles
-	yearlyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#22C55E")). // Bright green for yearly
+	// Recurrence indicator styles - Comprehensive system
+	weeklyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#F59E0B")). // Amber for weekly
 			Bold(true)
 
 	monthlyStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#3B82F6")). // Bright blue for monthly
+			Bold(true)
+
+	yearlyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#22C55E")). // Bright green for yearly
+			Bold(true)
+
+	biyearlyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#8B5CF6")). // Purple for bi-yearly
+			Bold(true)
+
+	multiyearStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#EF4444")). // Red for 3Y+ multi-year
 			Bold(true)
 
 	// Price highlighting styles - Much more contrasting
@@ -267,6 +295,9 @@ func initialModel() model {
 		terminalHeight: 24,                       // Default height
 		sortMode:       config.Settings.SortMode, // Load persistent sort mode
 		showSortMenu:   false,
+		analytics:      NewFinanceAnalytics(), // Initialize AI analytics
+		emailAnalytics: NewEmailAnalytics(),   // Initialize email AI analytics
+		currentMailbox: "inbox",               // Default mailbox
 	}
 }
 
@@ -359,6 +390,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vpnFetchedMsg:
 		m.vpn = msg.vpn
 		return m, nil
+	case notificationClearMsg:
+		// Clear the notification
+		m.showNotification = false
+		m.notificationText = ""
+		return m, nil
 	}
 	return m, nil
 }
@@ -386,7 +422,7 @@ func (m model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if !m.config.HasAccount() {
 				m.choices = []string{"Setup Account"}
 			} else {
-				m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Aliases"}
+				m.choices = []string{"Read Emails", "Aliases"}
 			}
 			// Ensure cursor is within bounds
 			if m.fmMenuCursor >= len(m.choices) {
@@ -498,9 +534,7 @@ func (m model) updateFMMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.message = ""
 				return m, m.fetchEmails()
-			case 1: // Compose Email
-				m.message = infoStyle.Render("Email composing feature coming soon!")
-			case 2: // Aliases
+			case 1: // Aliases
 				m.state = aliasMenu
 				m.cursor = 0
 				m.message = ""
@@ -712,6 +746,26 @@ type vpnFetchedMsg struct {
 	err error
 }
 
+type notificationClearMsg struct{}
+
+// Helper function to show auto-clearing notification
+func (m *model) showNotificationFor(text string, duration time.Duration) tea.Cmd {
+	// Stop existing timer if any
+	if m.notificationTimer != nil {
+		m.notificationTimer.Stop()
+	}
+
+	// Set notification
+	m.notificationText = text
+	m.showNotification = true
+	m.message = "" // Clear old message
+
+	// Return command to clear notification after duration
+	return tea.Tick(duration, func(t time.Time) tea.Msg {
+		return notificationClearMsg{}
+	})
+}
+
 func (m model) updateReadEmails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
@@ -724,7 +778,7 @@ func (m model) updateReadEmails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !m.config.HasAccount() {
 			m.choices = []string{"Setup Account"}
 		} else {
-			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Aliases"}
+			m.choices = []string{"Read Emails", "Aliases"}
 		}
 	case "j": // Move down
 		if m.cursor < len(m.emails)-1 {
@@ -736,13 +790,126 @@ func (m model) updateReadEmails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "l": // View/Read email
 		if m.cursor < len(m.emails) {
-			// Switch to viewEmail state (implementation can be enhanced later)
+			// Track email reading for analytics
+			if m.emailAnalytics != nil && m.cursor < len(m.emails) {
+				email := m.emails[m.cursor]
+				metadata := map[string]interface{}{
+					"email_index": m.cursor,
+					"mailbox":     m.currentMailbox,
+				}
+				m.emailAnalytics.LogEmailEvent("read", email.ID, email.From, email.Subject,
+					email.To, m.currentMailbox, metadata)
+			}
+			// Switch to viewEmail state
 			m.state = viewEmail
 		}
-	case "r":
-		// Refresh emails
+	case "d": // Delete email
+		if m.cursor < len(m.emails) {
+			// Track email deletion for analytics
+			if m.emailAnalytics != nil {
+				email := m.emails[m.cursor]
+				metadata := map[string]interface{}{
+					"email_index": m.cursor,
+					"mailbox":     m.currentMailbox,
+					"delete_from": m.currentMailbox,
+				}
+				m.emailAnalytics.LogEmailEvent("delete", email.ID, email.From, email.Subject,
+					email.To, m.currentMailbox, metadata)
+			}
+
+			// TODO: Implement actual email deletion via FastMail API
+			m.message = successStyle.Render("✓ Email deleted (API integration needed)")
+
+			// Remove from local list for now
+			if m.cursor < len(m.emails) {
+				m.emails = append(m.emails[:m.cursor], m.emails[m.cursor+1:]...)
+				if m.cursor >= len(m.emails) && len(m.emails) > 0 {
+					m.cursor = len(m.emails) - 1
+				} else if len(m.emails) == 0 {
+					m.cursor = 0
+				}
+			}
+		}
+	case "r": // Reply to email
+		if m.cursor < len(m.emails) {
+			// Track reply action for analytics
+			if m.emailAnalytics != nil {
+				email := m.emails[m.cursor]
+				metadata := map[string]interface{}{
+					"email_index": m.cursor,
+					"mailbox":     m.currentMailbox,
+				}
+				m.emailAnalytics.LogEmailEvent("reply", email.ID, email.From, email.Subject,
+					email.To, m.currentMailbox, metadata)
+			}
+
+			// TODO: Implement reply functionality
+			m.message = infoStyle.Render("📝 Reply feature coming soon!")
+		}
+	case "x": // Refresh emails
 		if m.config.HasAccount() {
+			// Track refresh action
+			if m.emailAnalytics != nil {
+				metadata := map[string]interface{}{
+					"mailbox":     m.currentMailbox,
+					"email_count": len(m.emails),
+				}
+				m.emailAnalytics.LogEmailEvent("refresh", "", "", "", "", m.currentMailbox, metadata)
+			}
+
 			m.loading = true
+			m.message = infoStyle.Render("🔄 Refreshing emails...")
+			return m, m.fetchEmails()
+		}
+	case "1": // Switch to Inbox
+		if m.currentMailbox != "inbox" {
+			// Track mailbox switch
+			if m.emailAnalytics != nil {
+				metadata := map[string]interface{}{
+					"from_mailbox": m.currentMailbox,
+					"to_mailbox":   "inbox",
+				}
+				m.emailAnalytics.LogEmailEvent("switch_mailbox", "", "", "", "", "inbox", metadata)
+			}
+
+			m.currentMailbox = "inbox"
+			m.cursor = 0
+			m.loading = true
+			m.message = infoStyle.Render("📥 Switching to Inbox...")
+			return m, m.fetchEmails()
+		}
+	case "2": // Switch to Spam
+		if m.currentMailbox != "spam" {
+			// Track mailbox switch
+			if m.emailAnalytics != nil {
+				metadata := map[string]interface{}{
+					"from_mailbox": m.currentMailbox,
+					"to_mailbox":   "spam",
+				}
+				m.emailAnalytics.LogEmailEvent("switch_mailbox", "", "", "", "", "spam", metadata)
+			}
+
+			m.currentMailbox = "spam"
+			m.cursor = 0
+			m.loading = true
+			m.message = infoStyle.Render("🚫 Switching to Spam...")
+			return m, m.fetchEmails()
+		}
+	case "3": // Switch to Trash
+		if m.currentMailbox != "trash" {
+			// Track mailbox switch
+			if m.emailAnalytics != nil {
+				metadata := map[string]interface{}{
+					"from_mailbox": m.currentMailbox,
+					"to_mailbox":   "trash",
+				}
+				m.emailAnalytics.LogEmailEvent("switch_mailbox", "", "", "", "", "trash", metadata)
+			}
+
+			m.currentMailbox = "trash"
+			m.cursor = 0
+			m.loading = true
+			m.message = infoStyle.Render("🗑️ Switching to Trash...")
 			return m, m.fetchEmails()
 		}
 	case "shift+1", "!":
@@ -797,7 +964,7 @@ func (m model) updateViewAccount(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !m.config.HasAccount() {
 			m.choices = []string{"Setup Account"}
 		} else {
-			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Aliases"}
+			m.choices = []string{"Read Emails", "Aliases"}
 		}
 	case "l": // Select/Edit
 		// Start editing account
@@ -822,7 +989,7 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !m.config.HasAccount() {
 			m.choices = []string{"Setup Account"}
 		} else {
-			m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Account Settings"}
+			m.choices = []string{"Read Emails", "Account Settings"}
 		}
 	case "enter":
 		switch m.state {
@@ -864,7 +1031,7 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.message = successStyle.Render("✓ Account saved successfully!")
 				// Update choices to show full FM menu now that account is set up
-				m.choices = []string{"Read Emails", "Compose Email (Coming Soon)", "Aliases"}
+				m.choices = []string{"Read Emails", "Aliases"}
 			}
 
 			m.state = fmMenu
@@ -896,10 +1063,12 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.services)-1 {
 			m.cursor++
 		}
+		m.message = "" // Clear message when navigating
 	case "k": // Move up
 		if m.cursor > 0 {
 			m.cursor--
 		}
+		m.message = "" // Clear message when navigating
 	case "l": // Select/View service
 		if m.cursor < len(m.services) {
 			m.selectedService = m.cursor
@@ -922,17 +1091,28 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					m.message = errorStyle.Render(fmt.Sprintf("Error deleting service: %v", err))
 				} else {
+					// Track deletion for AI analytics
+					if m.analytics != nil {
+						metadata := map[string]interface{}{
+							"category":   serviceToDelete.Tags,
+							"recurrence": serviceToDelete.Recurrence,
+						}
+						m.analytics.LogEvent("delete", serviceToDelete.Name, serviceToDelete.GetYearlyCost(), metadata)
+					}
+
 					err = saveFinanceData(m.financeData)
 					if err != nil {
 						m.message = errorStyle.Render(fmt.Sprintf("Error saving data: %v", err))
 					} else {
 						m.services = m.financeData.GetActiveServices() // Reload active services only
+						m.applySorting()                               // Reapply current sorting after reload
 						if m.cursor >= len(m.services) && len(m.services) > 0 {
 							m.cursor = len(m.services) - 1
 						} else if len(m.services) == 0 {
 							m.cursor = 0
 						}
-						m.message = successStyle.Render("✓ Service deleted successfully!")
+						// Use auto-clearing notification instead of persistent message
+						return m, m.showNotificationFor("✓ Service deleted successfully!", 3*time.Second)
 					}
 				}
 			}
@@ -954,17 +1134,28 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					m.message = errorStyle.Render(fmt.Sprintf("Error cancelling service: %v", err))
 				} else {
+					// Track cancellation for AI analytics
+					if m.analytics != nil {
+						metadata := map[string]interface{}{
+							"category":   serviceToCancel.Tags,
+							"recurrence": serviceToCancel.Recurrence,
+						}
+						m.analytics.LogEvent("cancel", serviceToCancel.Name, serviceToCancel.GetYearlyCost(), metadata)
+					}
+
 					err = saveFinanceData(m.financeData)
 					if err != nil {
 						m.message = errorStyle.Render(fmt.Sprintf("Error saving data: %v", err))
 					} else {
 						m.services = m.financeData.GetActiveServices() // Reload active services only
+						m.applySorting()                               // Reapply current sorting after reload
 						if m.cursor >= len(m.services) && len(m.services) > 0 {
 							m.cursor = len(m.services) - 1
 						} else if len(m.services) == 0 {
 							m.cursor = 0
 						}
-						m.message = successStyle.Render("✓ Subscription cancelled (preserved in YAML)!")
+						// Use auto-clearing notification instead of persistent message
+						return m, m.showNotificationFor("✓ Subscription cancelled (preserved in YAML)!", 3*time.Second)
 					}
 				}
 			}
@@ -995,12 +1186,24 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					m.message = errorStyle.Render(fmt.Sprintf("Error renewing service: %v", err))
 				} else {
+					// Track renewal for AI analytics
+					if m.analytics != nil {
+						metadata := map[string]interface{}{
+							"category":         serviceToRenew.Tags,
+							"recurrence":       serviceToRenew.Recurrence,
+							"old_renewal_date": serviceToRenew.RenewalDate,
+						}
+						m.analytics.LogEvent("renew", serviceToRenew.Name, serviceToRenew.GetYearlyCost(), metadata)
+					}
+
 					err = saveFinanceData(m.financeData)
 					if err != nil {
 						m.message = errorStyle.Render(fmt.Sprintf("Error saving data: %v", err))
 					} else {
 						m.services = m.financeData.GetActiveServices() // Reload active services
-						m.message = successStyle.Render("✓ Subscription renewed successfully!")
+						m.applySorting()                               // Reapply current sorting after reload
+						// Use auto-clearing notification instead of persistent message
+						return m, m.showNotificationFor("✓ Subscription renewed successfully!", 3*time.Second)
 					}
 				}
 			}
@@ -1024,6 +1227,20 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			// Track sorting for AI analytics
+			if m.analytics != nil {
+				sortNames := []string{"original order", "renewal date", "monthly price", "yearly price"}
+				sortName := "unknown"
+				if sortOption >= 0 && sortOption < len(sortNames) {
+					sortName = sortNames[sortOption]
+				}
+				metadata := map[string]interface{}{
+					"sort_type":     sortName,
+					"previous_sort": m.sortMode,
+				}
+				m.analytics.LogEvent("sort", "", 0, metadata)
+			}
+
 			m.applySorting()
 
 			sortNames := []string{"original order", "renewal date", "monthly price", "yearly price"}
@@ -1031,6 +1248,7 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.message = successStyle.Render(fmt.Sprintf("✓ Sorted by %s (saved)", sortNames[sortOption]))
 			}
 		}
+
 	}
 	return m, nil
 }
@@ -1174,15 +1392,38 @@ func (m *model) renewService(index int) error {
 	}
 
 	var newDate time.Time
-	switch service.Recurrence {
-	case "M": // Monthly
+	recurrence := service.Recurrence
+
+	switch {
+	case recurrence == "W": // Weekly
+		newDate = currentDate.AddDate(0, 0, 7)
+	case recurrence == "M": // Monthly
 		newDate = currentDate.AddDate(0, 1, 0)
-	case "Y": // Yearly
+	case recurrence == "Y": // Yearly
 		newDate = currentDate.AddDate(1, 0, 0)
-	case "2Y": // Bi-yearly
+	case recurrence == "2Y": // Bi-yearly
 		newDate = currentDate.AddDate(2, 0, 0)
+	case recurrence == "3Y": // 3-year cycle
+		newDate = currentDate.AddDate(3, 0, 0)
+	case recurrence == "4Y": // 4-year cycle
+		newDate = currentDate.AddDate(4, 0, 0)
+	case recurrence == "5Y": // 5-year cycle
+		newDate = currentDate.AddDate(5, 0, 0)
+	case len(recurrence) >= 2 && recurrence[len(recurrence)-1:] == "Y":
+		// Handle any other multi-year format (6Y, 7Y, etc.)
+		if yearStr := recurrence[:len(recurrence)-1]; yearStr != "" {
+			if years, parseErr := strconv.Atoi(yearStr); parseErr == nil && years > 0 {
+				newDate = currentDate.AddDate(years, 0, 0)
+			} else {
+				// Invalid year format, default to yearly
+				newDate = currentDate.AddDate(1, 0, 0)
+			}
+		} else {
+			// Empty year part, default to yearly
+			newDate = currentDate.AddDate(1, 0, 0)
+		}
 	default:
-		// Default to monthly if recurrence is unknown
+		// Unknown recurrence type, default to monthly
 		newDate = currentDate.AddDate(0, 1, 0)
 	}
 
@@ -1394,6 +1635,24 @@ func (m model) View() string {
 
 	if m.message != "" {
 		s.WriteString(m.message)
+		s.WriteString("\n")
+	}
+
+	// Auto-clearing notification system with enhanced styling
+	if m.showNotification && m.notificationText != "" {
+		// Create a toast-style notification box
+		notificationStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#10B981")). // Green text
+			Background(lipgloss.Color("#064E3B")). // Dark green background
+			Bold(true).
+			Padding(0, 2).
+			Margin(0, 1).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#10B981")). // Green border
+			Width(len(m.notificationText) + 4)
+
+		notification := notificationStyle.Render(m.notificationText)
+		s.WriteString(notification)
 		s.WriteString("\n")
 	}
 
@@ -1640,31 +1899,58 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 			yearlyDisplay = fmt.Sprintf("%.0f PLN/yr", yearly)
 		}
 
-		// Get color-coded recurrence indicator
+		// Get color-coded recurrence indicator - Comprehensive system
 		var recurrenceIndicator string
-		switch service.Recurrence {
-		case "Y", "2Y":
-			recurrenceIndicator = yearlyStyle.Render("Y")
-		case "M":
+		recurrence := service.Recurrence
+
+		switch {
+		case recurrence == "W":
+			recurrenceIndicator = weeklyStyle.Render("W")
+		case recurrence == "M":
 			recurrenceIndicator = monthlyStyle.Render("M")
+		case recurrence == "Y":
+			recurrenceIndicator = yearlyStyle.Render("Y")
+		case recurrence == "2Y":
+			recurrenceIndicator = biyearlyStyle.Render("2Y")
+		case recurrence == "3Y":
+			recurrenceIndicator = multiyearStyle.Render("3Y")
+		case recurrence == "4Y":
+			recurrenceIndicator = multiyearStyle.Render("4Y")
+		case recurrence == "5Y":
+			recurrenceIndicator = multiyearStyle.Render("5Y")
+		case len(recurrence) >= 2 && recurrence[len(recurrence)-1:] == "Y":
+			// Handle any other multi-year format (6Y, 7Y, etc.)
+			recurrenceIndicator = multiyearStyle.Render(recurrence)
 		default:
-			recurrenceIndicator = monthlyStyle.Render("M") // Default to monthly style
+			// Unknown format - default to monthly style
+			recurrenceIndicator = monthlyStyle.Render("?")
 		}
 
 		monthly := service.GetMonthlyCost()
 
-		// Dynamic price coloring based on recurrence
+		// Dynamic price coloring based on recurrence - Enhanced for all cycles
 		var monthlyDisplay, yearlyStyled string
-		isYearlyBilling := service.Recurrence == "Y" || service.Recurrence == "2Y"
+
+		// Determine if this is a yearly-based billing cycle
+		isYearlyBilling := recurrence == "Y" || recurrence == "2Y" || recurrence == "3Y" ||
+			recurrence == "4Y" || recurrence == "5Y" ||
+			(len(recurrence) >= 2 && recurrence[len(recurrence)-1:] == "Y")
+
+		// Weekly billing is treated similar to monthly (short-term cycles)
+		isShortTermBilling := recurrence == "W" || recurrence == "M"
 
 		if isYearlyBilling {
-			// Yearly billing - highlight yearly price, dim monthly
+			// Yearly-based billing - highlight yearly price, dim monthly
 			yearlyStyled = primaryPriceStyle.Render(yearlyDisplay)
 			monthlyDisplay = secondaryPriceStyle.Render(fmt.Sprintf("%.2f PLN/mo", monthly))
-		} else {
-			// Monthly billing - highlight monthly price, dim yearly
+		} else if isShortTermBilling {
+			// Short-term billing (weekly/monthly) - highlight monthly price, dim yearly
 			yearlyStyled = secondaryPriceStyle.Render(yearlyDisplay)
 			monthlyDisplay = primaryPriceStyle.Render(fmt.Sprintf("%.2f PLN/mo", monthly))
+		} else {
+			// Unknown billing type - use neutral styling
+			yearlyStyled = yearlyDisplay
+			monthlyDisplay = fmt.Sprintf("%.2f PLN/mo", monthly)
 		}
 
 		// Renewal date truncation for fixed column width

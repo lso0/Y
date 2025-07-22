@@ -1,0 +1,19 @@
+{
+  "id": "1753206601562754000",
+  "timestamp": "2025-07-22T19:50:01.562754+02:00",
+  "action": "cancel",
+  "service_name": "Replit",
+  "amount": 40.833333333333336,
+  "metadata": {
+    "category": "Softwares",
+    "recurrence": "Y"
+  },
+  "context": {
+    "time_of_day": "evening",
+    "day_of_week": "Tuesday",
+    "total_services": 0,
+    "total_monthly": 0,
+    "session_length": 0
+  }
+}{"id":"1753207091063157000","timestamp":"2025-07-22T19:58:11.063157+02:00","action":"renew","service_name":"FastMail","amount":613.12,"metadata":{"category":"Softwares","old_renewal_date":"2028-06-30","recurrence":"3Y"},"context":{"time_of_day":"evening","day_of_week":"Tuesday","total_services":0,"total_monthly":0,"session_length":0}}
+{"id":"1753207623053814000","timestamp":"2025-07-22T20:07:03.053814+02:00","action":"renew","service_name":"FastMail","amount":613.12,"metadata":{"category":"Softwares","old_renewal_date":"2025-06-30","recurrence":"3Y"},"context":{"time_of_day":"evening","day_of_week":"Tuesday","total_services":0,"total_monthly":0,"session_length":0}}

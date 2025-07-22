@@ -1,0 +1,59 @@
+# FastMail Data & Analytics Configuration
+
+# Email storage and caching
+emails:
+  inbox: []
+  spam: []
+  trash: []
+  sent: []
+  last_sync: ""
+  total_count: 0
+
+# AI Analytics for email behavior  
+analytics:
+  enabled: true
+  data_file: "analytics/email_analytics.jsonl"
+  patterns:
+    most_active_time: ""
+    most_common_action: ""
+    reply_frequency: 0.0
+    delete_frequency: 0.0
+  recommendations: []
+
+# Email aliases and accounts
+aliases:
+  primary_email: ""
+  aliases: []
+  # Example:
+  # - address: "work@yourdomain.com"
+  #   name: "Work Email"
+  #   enabled: true
+  # - address: "personal@yourdomain.com" 
+  #   name: "Personal Email"
+  #   enabled: true
+
+# Mailbox configuration
+mailboxes:
+  current_mailbox: "inbox"  # inbox, spam, trash
+  auto_refresh_interval: 300  # seconds
+  max_emails_display: 50
+  
+# Email filtering and classification
+filters:
+  auto_delete_spam: false
+  auto_archive_newsletters: false
+  vip_senders: []
+  blocked_senders: []
+  
+# UI preferences
+ui:
+  show_email_alias: true
+  show_read_status: true
+  show_timestamps: true
+  compact_view: false
+
+# Performance settings
+performance:
+  cache_emails: true
+  cache_duration_hours: 24
+  batch_size: 25 

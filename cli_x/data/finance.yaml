@@ -22,8 +22,8 @@ services:
         c_yearly: 490
       recurrence: "Y"
       renewal_date: "2025-11-30"
-      status: 1
-      state: active
+      status: 0
+      state: cancelled
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -35,7 +35,7 @@ services:
         currency: PLN
         c_monthly: 0
         c_yearly: 174.57
-      recurrence: Y
+      recurrence: "Y"
       renewal_date: "2025-08-03"
       status: 1
       state: active
@@ -63,8 +63,8 @@ services:
       tags: Softwares
       prices:
         currency: PLN
-        c_monthly: 0
-        c_yearly: 735
+        c_monthly: 735
+        c_yearly: 0
       recurrence: M
       renewal_date: "2025-08-19"
       status: 1
@@ -186,7 +186,7 @@ services:
         c_monthly: 757.86
         c_yearly: 0
       recurrence: M
-      renewal_date: "2025-07-20"
+      renewal_date: "2025-08-20"
       status: 1
       state: active
       student: false
@@ -335,7 +335,7 @@ services:
         currency: PLN
         c_monthly: 0
         c_yearly: 613.12
-      recurrence: "Y"
+      recurrence: 3Y
       renewal_date: "2028-06-30"
       status: 1
       state: active
