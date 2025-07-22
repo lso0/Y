@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,8 +16,13 @@ type FastmailAccount struct {
 	APIKey string
 }
 
+type AppSettings struct {
+	SortMode int `json:"sort_mode"` // 0=unsorted, 1=date, 2=monthly, 3=yearly
+}
+
 type Config struct {
 	MainAccount *FastmailAccount
+	Settings    *AppSettings
 }
 
 func loadConfig() (*Config, error) {
@@ -38,7 +44,11 @@ func loadConfig() (*Config, error) {
 	email := os.Getenv("FM_M_0")
 	password := os.Getenv("FM_P_0")
 
-	config := &Config{}
+	config := &Config{
+		Settings: &AppSettings{
+			SortMode: 0, // Default to unsorted
+		},
+	}
 
 	// If all FastMail credentials are provided, create the account
 	if apiKey != "" && email != "" && password != "" {
@@ -50,12 +60,37 @@ func loadConfig() (*Config, error) {
 		}
 	}
 
+	// Load app-specific settings from local config file
+	configPath := "cli_x_config.json"
+	if _, err := os.Stat(configPath); err == nil {
+		// Config file exists, load it
+		data, err := os.ReadFile(configPath)
+		if err == nil {
+			var settings AppSettings
+			if json.Unmarshal(data, &settings) == nil {
+				config.Settings = &settings
+			}
+		}
+	}
+
 	return config, nil
 }
 
 func saveConfig(config *Config) error {
-	// Since we're reading from parent .env file, we don't save config changes
-	// The .env file should be managed manually
+	// Save app-specific settings to local config file
+	if config.Settings != nil {
+		configPath := "cli_x_config.json"
+		data, err := json.MarshalIndent(config.Settings, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %w", err)
+		}
+
+		if err := os.WriteFile(configPath, data, 0644); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+	}
+
+	// Note: We don't save .env file changes as that should be managed manually
 	return nil
 }
 

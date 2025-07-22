@@ -8,6 +8,7 @@ services:
       recurrence: 2Y
       renewal_date: "2027-01-23"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -22,6 +23,7 @@ services:
       recurrence: "Y"
       renewal_date: "2025-11-30"
       status: 1
+      state: active
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -33,9 +35,10 @@ services:
         currency: PLN
         c_monthly: 0
         c_yearly: 174.57
-      recurrence: M
+      recurrence: Y
       renewal_date: "2025-08-03"
       status: 1
+      state: active
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -50,6 +53,7 @@ services:
       recurrence: "Y"
       renewal_date: "2025-08-06"
       status: 1
+      state: active
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -60,10 +64,11 @@ services:
       prices:
         currency: PLN
         c_monthly: 0
-        c_yearly: 1562
-      recurrence: "Y"
-      renewal_date: "2025-10-19"
+        c_yearly: 735
+      recurrence: M
+      renewal_date: "2025-08-19"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -78,6 +83,7 @@ services:
       recurrence: "Y"
       renewal_date: "2026-03-16"
       status: 1
+      state: active
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -92,6 +98,7 @@ services:
       recurrence: "Y"
       renewal_date: "2025-08-23"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -106,6 +113,7 @@ services:
       recurrence: "Y"
       renewal_date: "2025-11-25"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -120,6 +128,7 @@ services:
       recurrence: "Y"
       renewal_date: "2026-01-27"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -134,6 +143,7 @@ services:
       recurrence: "Y"
       renewal_date: "2025-11-01"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -148,6 +158,7 @@ services:
       recurrence: "Y"
       renewal_date: "2025-10-20"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -160,8 +171,9 @@ services:
         c_monthly: 14.99
         c_yearly: 0
       recurrence: M
-      renewal_date: "2025-07-21"
+      renewal_date: "2025-08-21"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -176,6 +188,7 @@ services:
       recurrence: M
       renewal_date: "2025-07-20"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -190,6 +203,7 @@ services:
       recurrence: M
       renewal_date: "2025-05-25"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -202,8 +216,9 @@ services:
         c_monthly: 99.99
         c_yearly: 0
       recurrence: M
-      renewal_date: "2025-06-28"
+      renewal_date: "2025-07-28"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -218,6 +233,7 @@ services:
       recurrence: "Y"
       renewal_date: "2026-02-25"
       status: 1
+      state: active
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -232,6 +248,7 @@ services:
       recurrence: "Y"
       renewal_date: "2026-03-29"
       status: 1
+      state: active
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -246,6 +263,7 @@ services:
       recurrence: "Y"
       renewal_date: "2026-04-03"
       status: 1
+      state: active
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -260,6 +278,7 @@ services:
       recurrence: "Y"
       renewal_date: "2026-04-25"
       status: 1
+      state: active
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -274,6 +293,7 @@ services:
       recurrence: "Y"
       renewal_date: "2026-04-28"
       status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -286,8 +306,9 @@ services:
         c_monthly: 14.99
         c_yearly: 0
       recurrence: M
-      renewal_date: "2026-07-19"
+      renewal_date: "2025-08-19"
       status: 1
+      state: active
       student: true
       trial_end_date: ""
       bank_service: ING
@@ -301,7 +322,8 @@ services:
         c_yearly: 0
       recurrence: M
       renewal_date: "2025-07-19"
-      status: 1
+      status: 0
+      state: cancelled
       student: false
       trial_end_date: ""
       bank_service: ING
@@ -316,6 +338,22 @@ services:
       recurrence: "Y"
       renewal_date: "2028-06-30"
       status: 1
+      state: active
+      student: false
+      trial_end_date: ""
+      bank_service: ING
+      card: 5123 4567 8901 2345
+      account: wiktor11gal@gmail.com
+    - name: Cloudflare
+      tags: Domain
+      prices:
+        currency: PLN
+        c_monthly: 0
+        c_yearly: 19
+      recurrence: "Y"
+      renewal_date: "2025-12-30"
+      status: 1
+      state: active
       student: false
       trial_end_date: ""
       bank_service: ING

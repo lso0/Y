@@ -401,12 +401,157 @@ class RevenueCatAutomation:
             logger.exception("Full API key creation exception details:")
             return None
 
+    def fetch_projects_from_api(self):
+        """Fetch all projects from RevenueCat API."""
+        try:
+            self.rate_limit()  # Rate limit before API call
+            url = f"{self.base_url}/internal/v1/developers/me/projects"
+            
+            logger.debug(f"[Account {self.account_id}] Fetching projects from API: {url}")
+            
+            response = self.session.get(url, headers=self.headers)
+            
+            logger.debug(f"[Account {self.account_id}] Projects fetch response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                projects_data = response.json()
+                
+                # Handle different response formats
+                if isinstance(projects_data, list):
+                    # Direct list of projects
+                    projects_list = projects_data
+                elif isinstance(projects_data, dict) and 'projects' in projects_data:
+                    # Dictionary with projects key
+                    projects_list = projects_data['projects']
+                else:
+                    # Try to extract projects from whatever structure we got
+                    projects_list = projects_data if isinstance(projects_data, list) else []
+                
+                logger.info(f"[Account {self.account_id}] Successfully fetched {len(projects_list)} projects from API")
+                logger.debug(f"[Account {self.account_id}] Projects response format: {type(projects_data)}")
+                
+                return projects_list
+            else:
+                logger.error(f"[Account {self.account_id}] Failed to fetch projects from API with status code: {response.status_code}")
+                logger.error(f"Response: {response.text}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"[Account {self.account_id}] Error fetching projects from API: {str(e)}")
+            return None
+
+    def sync_projects_with_server(self):
+        """Sync local database with server projects data."""
+        try:
+            logger.info(f"[Account {self.account_id}] Syncing projects with server...")
+            
+            # Fetch projects from API
+            server_projects = self.fetch_projects_from_api()
+            if server_projects is None:
+                logger.warning(f"[Account {self.account_id}] Could not fetch projects from server, using local database")
+                return False
+            
+            # Update local database with server data
+            synced_count = 0
+            for project in server_projects:
+                project_id = project.get('id')
+                if project_id:
+                    # Check if we have this project locally
+                    if project_id in self.db["projects"]:
+                        # Update existing project info
+                        self.db["projects"][project_id]["project"] = {
+                            "name": project.get('name'),
+                            "id": project_id,
+                            "created_at": project.get('created_at', 'Unknown'),
+                            "server_synced": datetime.now().isoformat()
+                        }
+                        logger.debug(f"[Account {self.account_id}] Updated project: {project.get('name')}")
+                    else:
+                        # Add new project found on server
+                        self.db["projects"][project_id] = {
+                            "project": {
+                                "name": project.get('name'),
+                                "id": project_id,
+                                "created_at": project.get('created_at', 'Unknown'),
+                                "server_synced": datetime.now().isoformat()
+                            },
+                            "api_key": {
+                                "key": "Not available - created outside this tool",
+                                "id": "unknown",
+                                "label": "unknown",
+                                "created_at": "unknown"
+                            }
+                        }
+                        logger.info(f"[Account {self.account_id}] Found new project on server: {project.get('name')}")
+                    synced_count += 1
+            
+            # Check for projects in local DB that no longer exist on server
+            server_project_ids = {p.get('id') for p in server_projects if p.get('id')}
+            local_project_ids = set(self.db["projects"].keys())
+            removed_projects = local_project_ids - server_project_ids
+            
+            for removed_id in removed_projects:
+                project_name = self.db["projects"][removed_id]["project"]["name"]
+                logger.warning(f"[Account {self.account_id}] Project '{project_name}' exists locally but not on server (may have been deleted)")
+                # Mark as potentially deleted but don't remove from local DB
+                self.db["projects"][removed_id]["project"]["server_status"] = "not_found_on_server"
+                self.db["projects"][removed_id]["project"]["last_sync"] = datetime.now().isoformat()
+            
+            # Save updated database
+            self.save_db()
+            logger.info(f"[Account {self.account_id}] Sync complete: {synced_count} projects synced with server")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"[Account {self.account_id}] Error syncing with server: {str(e)}")
+            return False
+
+    def list_projects_with_sync(self):
+        """List projects with real-time sync from server."""
+        try:
+            logger.info(f"[Account {self.account_id}] Listing projects with server sync...")
+            
+            # First, sync with server to get latest data
+            sync_success = self.sync_projects_with_server()
+            
+            # Get projects from local database (now synced)
+            projects = self.db["projects"]
+            
+            if projects:
+                logger.info(f"[Account {self.account_id}] Found {len(projects)} projects:")
+                project_list = []
+                
+                for project_id, data in projects.items():
+                    project = data["project"]
+                    api_key = data["api_key"]
+                    
+                    project_info = {
+                        "name": project['name'],
+                        "id": project['id'],
+                        "created_at": project['created_at'],
+                        "api_key": api_key['key'],
+                        "api_key_id": api_key['id'],
+                        "server_synced": project.get('server_synced', 'Not synced'),
+                        "server_status": project.get('server_status', 'active')
+                    }
+                    project_list.append(project_info)
+                
+                return project_list
+            else:
+                logger.info(f"[Account {self.account_id}] No projects found")
+                return []
+                
+        except Exception as e:
+            logger.error(f"[Account {self.account_id}] Error listing projects: {str(e)}")
+            return None
+
     def close(self):
         """Clean up the session."""
         self.session.close()
         logger.info("Session closed")
 
-def process_account(account_id, action, project_names):
+def process_account(account_id, action, project_names, no_sync=False):
     """Process a single account's operations."""
     try:
         # Set up logging for this process
@@ -499,20 +644,56 @@ def process_account(account_id, action, project_names):
                             process_logger.info(f"  - {project}")
                 
                 elif action == 'l_p':
-                    # List all projects for the account
-                    projects = automation.db["projects"]
-                    if projects:
-                        process_logger.info(f"\nProjects for account {account_id}:")
-                        for project_id, data in projects.items():
-                            project = data["project"]
-                            api_key = data["api_key"]
-                            process_logger.info(f"\nProject: {project['name']}")
-                            process_logger.info(f"  ID: {project['id']}")
-                            process_logger.info(f"  Created: {project['created_at']}")
-                            process_logger.info(f"  API Key: {api_key['key']}")
-                            process_logger.info(f"  API Key ID: {api_key['id']}")
+                    # List projects - with or without server sync based on flag
+                    if no_sync:
+                        # Use local database only
+                        projects = automation.db["projects"]
+                        if projects:
+                            process_logger.info(f"\n📋 Projects for account {account_id} (local database only):")
+                            for project_id, data in projects.items():
+                                project = data["project"]
+                                api_key = data["api_key"]
+                                process_logger.info(f"\n📦 Project: {project['name']}")
+                                process_logger.info(f"   🆔 ID: {project['id']}")
+                                process_logger.info(f"   📅 Created: {project['created_at']}")
+                                process_logger.info(f"   🔑 API Key: {api_key['key']}")
+                                process_logger.info(f"   🔐 API Key ID: {api_key['id']}")
+                                process_logger.info(f"   💾 Source: Local database only")
+                        else:
+                            process_logger.info(f"📭 No projects found for account {account_id} (local database)")
                     else:
-                        process_logger.info(f"No projects found for account {account_id}")
+                        # List all projects with server sync (default behavior)
+                        project_list = automation.list_projects_with_sync()
+                        if project_list is not None and len(project_list) > 0:
+                            process_logger.info(f"\n📋 Projects for account {account_id} (synced with server):")
+                            for project in project_list:
+                                process_logger.info(f"\n📦 Project: {project['name']}")
+                                process_logger.info(f"   🆔 ID: {project['id']}")
+                                process_logger.info(f"   📅 Created: {project['created_at']}")
+                                process_logger.info(f"   🔑 API Key: {project['api_key']}")
+                                process_logger.info(f"   🔐 API Key ID: {project['api_key_id']}")
+                                process_logger.info(f"   🔄 Server Sync: {project['server_synced']}")
+                                if project['server_status'] != 'active':
+                                    process_logger.warning(f"   ⚠️ Status: {project['server_status']}")
+                        elif project_list is not None:
+                            process_logger.info(f"📭 No projects found for account {account_id}")
+                        else:
+                            process_logger.error(f"❌ Failed to fetch projects for account {account_id}")
+                            # Fallback to local database
+                            projects = automation.db["projects"]
+                            if projects:
+                                process_logger.info(f"\n📋 Projects for account {account_id} (local database fallback):")
+                                for project_id, data in projects.items():
+                                    project = data["project"]
+                                    api_key = data["api_key"]
+                                    process_logger.info(f"\n📦 Project: {project['name']}")
+                                    process_logger.info(f"   🆔 ID: {project['id']}")
+                                    process_logger.info(f"   📅 Created: {project['created_at']}")
+                                    process_logger.info(f"   🔑 API Key: {api_key['key']}")
+                                    process_logger.info(f"   🔐 API Key ID: {api_key['id']}")
+                                    process_logger.warning(f"   ⚠️ Local data only - server sync failed")
+                            else:
+                                process_logger.info(f"📭 No projects found for account {account_id} (local database)")
         finally:
             automation.close()
             
@@ -532,6 +713,8 @@ def main():
                        help='Enable debug logging for verbose HTTP request/response details')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging (same as --debug)')
+    parser.add_argument('--no-sync', action='store_true',
+                       help='Skip server sync and use only local database (for l_p action)')
     args = parser.parse_args()
     
     # Set log level based on arguments or environment variable
@@ -562,7 +745,7 @@ def main():
     for account_id in args.accounts:
         p = multiprocessing.Process(
             target=process_account,
-            args=(account_id, args.action, args.projects)
+            args=(account_id, args.action, args.projects, args.no_sync)
         )
         processes.append(p)
         p.start()

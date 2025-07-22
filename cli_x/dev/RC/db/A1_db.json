@@ -4,13 +4,42 @@
       "project": {
         "name": "testapp0210",
         "id": "41dd6bbd",
-        "created_at": "2025-07-21T16:56:21.926444"
+        "created_at": "Unknown",
+        "server_synced": "2025-07-21T18:31:15.195129"
       },
       "api_key": {
         "key": "sk_sHwtULgwcSFlqwDznCgTWxlHJldQL",
         "id": "apikeyba2870534b",
         "label": "APIKEYNAME1",
         "created_at": "2025-07-21T14:56:21Z"
+      }
+    },
+    "2032ca17": {
+      "project": {
+        "name": "AIChat",
+        "id": "2032ca17",
+        "created_at": "Unknown",
+        "server_synced": "2025-07-21T18:31:15.195090"
+      },
+      "api_key": {
+        "key": "Not available - created outside this tool",
+        "id": "unknown",
+        "label": "unknown",
+        "created_at": "unknown"
+      }
+    },
+    "c2fb00cf": {
+      "project": {
+        "name": "PomoTasksWG",
+        "id": "c2fb00cf",
+        "created_at": "Unknown",
+        "server_synced": "2025-07-21T18:31:15.195115"
+      },
+      "api_key": {
+        "key": "Not available - created outside this tool",
+        "id": "unknown",
+        "label": "unknown",
+        "created_at": "unknown"
       }
     }
   }

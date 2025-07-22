@@ -10,6 +10,8 @@ import (
 	fm "cli_x/mail"
 	"cli_x/system"
 
+	"sort"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -105,7 +107,11 @@ type model struct {
 	ghMenuCursor int
 
 	// Finance input tracking
-	financeInputField int // 0=name, 1=tag, 2=monthly
+	financeInputField int // 0=name, 1=tag, 2=monthly, 3=renewal_date
+
+	// Finance sorting state
+	sortMode     int  // 0=unsorted, 1=date, 2=monthly price, 3=yearly price
+	showSortMenu bool // Whether to show sorting options
 }
 
 var (
@@ -216,8 +222,31 @@ var (
 			Padding(0, 1)
 
 	placeholderStyle = lipgloss.NewStyle().
-				Foreground(mutedColor).
+				Foreground(lipgloss.Color("#6B7280")).
 				Italic(true)
+
+	// Recurrence indicator styles
+	yearlyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#22C55E")). // Bright green for yearly
+			Bold(true)
+
+	monthlyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#3B82F6")). // Bright blue for monthly
+			Bold(true)
+
+	// Price highlighting styles - Much more contrasting
+	primaryPriceStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#000000")). // Black text
+				Background(lipgloss.Color("#FBBF24")). // Bright yellow background
+				Bold(true).
+				Padding(0, 1) // Add padding around text
+
+	secondaryPriceStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#6B7280")). // Dark gray text
+				Background(lipgloss.Color("#1F2937")). // Dark background
+				Bold(false).
+				Italic(true).
+				Padding(0, 1) // Add padding around text
 )
 
 func initialModel() model {
@@ -230,12 +259,14 @@ func initialModel() model {
 	choices := []string{"FM", "Dev", "Finance", "Knowledge"}
 
 	return model{
-		config:         config,
 		state:          mainMenu,
-		selected:       make(map[int]struct{}),
 		choices:        choices,
-		terminalWidth:  80, // Default fallback
-		terminalHeight: 24, // Default fallback
+		cursor:         0,
+		config:         config,
+		terminalWidth:  80,                       // Default width
+		terminalHeight: 24,                       // Default height
+		sortMode:       config.Settings.SortMode, // Load persistent sort mode
+		showSortMenu:   false,
 	}
 }
 
@@ -567,10 +598,11 @@ func (m model) updateFinanceMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			data, err := loadFinanceData()
 			if err != nil {
 				m.message = errorStyle.Render(fmt.Sprintf("Error loading finance data: %v", err))
-				return m, nil
+				break
 			}
 			m.financeData = data
-			m.services = data.Services
+			m.services = data.GetActiveServices() // Only show active services in CLI
+			m.applySorting()                      // Apply current sorting preferences
 			m.state = financeList
 			m.cursor = 0
 			m.message = ""
@@ -580,6 +612,7 @@ func (m model) updateFinanceMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				Tags:        "general",
 				Prices:      Prices{Currency: "PLN", CMonthly: 0.0, CYearly: 0.0},
 				Status:      1,
+				State:       "active", // New state field
 				Recurrence:  "M",
 				RenewalDate: time.Now().AddDate(0, 1, 0).Format("2006-01-02"),
 				BankService: "ING",
@@ -874,21 +907,65 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "d": // Delete service
 		if m.cursor < len(m.services) {
-			err := m.financeData.DeleteService(m.cursor)
-			if err != nil {
-				m.message = errorStyle.Render(fmt.Sprintf("Error deleting service: %v", err))
-			} else {
-				err = saveFinanceData(m.financeData)
+			// Find the actual service index in the full services list
+			serviceToDelete := m.services[m.cursor]
+			actualIndex := -1
+			for i, service := range m.financeData.Services {
+				if service.Name == serviceToDelete.Name && service.Tags == serviceToDelete.Tags {
+					actualIndex = i
+					break
+				}
+			}
+
+			if actualIndex >= 0 {
+				err := m.financeData.DeleteService(actualIndex)
 				if err != nil {
-					m.message = errorStyle.Render(fmt.Sprintf("Error saving data: %v", err))
+					m.message = errorStyle.Render(fmt.Sprintf("Error deleting service: %v", err))
 				} else {
-					m.services = m.financeData.Services
-					if m.cursor >= len(m.services) && len(m.services) > 0 {
-						m.cursor = len(m.services) - 1
-					} else if len(m.services) == 0 {
-						m.cursor = 0
+					err = saveFinanceData(m.financeData)
+					if err != nil {
+						m.message = errorStyle.Render(fmt.Sprintf("Error saving data: %v", err))
+					} else {
+						m.services = m.financeData.GetActiveServices() // Reload active services only
+						if m.cursor >= len(m.services) && len(m.services) > 0 {
+							m.cursor = len(m.services) - 1
+						} else if len(m.services) == 0 {
+							m.cursor = 0
+						}
+						m.message = successStyle.Render("✓ Service deleted successfully!")
 					}
-					m.message = successStyle.Render("✓ Service deleted successfully!")
+				}
+			}
+		}
+	case "c": // Cancel subscription
+		if m.cursor < len(m.services) {
+			// Find the actual service index in the full services list
+			serviceToCancel := m.services[m.cursor]
+			actualIndex := -1
+			for i, service := range m.financeData.Services {
+				if service.Name == serviceToCancel.Name && service.Tags == serviceToCancel.Tags {
+					actualIndex = i
+					break
+				}
+			}
+
+			if actualIndex >= 0 {
+				err := m.financeData.CancelService(actualIndex)
+				if err != nil {
+					m.message = errorStyle.Render(fmt.Sprintf("Error cancelling service: %v", err))
+				} else {
+					err = saveFinanceData(m.financeData)
+					if err != nil {
+						m.message = errorStyle.Render(fmt.Sprintf("Error saving data: %v", err))
+					} else {
+						m.services = m.financeData.GetActiveServices() // Reload active services only
+						if m.cursor >= len(m.services) && len(m.services) > 0 {
+							m.cursor = len(m.services) - 1
+						} else if len(m.services) == 0 {
+							m.cursor = 0
+						}
+						m.message = successStyle.Render("✓ Subscription cancelled (preserved in YAML)!")
+					}
 				}
 			}
 		}
@@ -900,6 +977,59 @@ func (m model) updateFinanceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.financeInputField = 0
 			m.input = m.tempService.Name
 			m.message = ""
+		}
+	case "r": // Renew subscription
+		if m.cursor < len(m.services) {
+			// Find the actual service index in the full services list
+			serviceToRenew := m.services[m.cursor]
+			actualIndex := -1
+			for i, service := range m.financeData.Services {
+				if service.Name == serviceToRenew.Name && service.Tags == serviceToRenew.Tags {
+					actualIndex = i
+					break
+				}
+			}
+
+			if actualIndex >= 0 {
+				err := m.renewService(actualIndex)
+				if err != nil {
+					m.message = errorStyle.Render(fmt.Sprintf("Error renewing service: %v", err))
+				} else {
+					err = saveFinanceData(m.financeData)
+					if err != nil {
+						m.message = errorStyle.Render(fmt.Sprintf("Error saving data: %v", err))
+					} else {
+						m.services = m.financeData.GetActiveServices() // Reload active services
+						m.message = successStyle.Render("✓ Subscription renewed successfully!")
+					}
+				}
+			}
+		}
+	case "s": // Show sorting menu
+		m.showSortMenu = !m.showSortMenu
+		if !m.showSortMenu {
+			m.message = ""
+		}
+	case "1", "2", "3", "0": // Sort options (when sort menu is visible)
+		if m.showSortMenu {
+			sortOption, _ := strconv.Atoi(msg.String())
+			m.sortMode = sortOption
+			m.showSortMenu = false
+
+			// Save sort mode to config for persistence
+			if m.config.Settings != nil {
+				m.config.Settings.SortMode = sortOption
+				if err := saveConfig(m.config); err != nil {
+					m.message = errorStyle.Render(fmt.Sprintf("Warning: Could not save sort preference: %v", err))
+				}
+			}
+
+			m.applySorting()
+
+			sortNames := []string{"original order", "renewal date", "monthly price", "yearly price"}
+			if sortOption >= 0 && sortOption < len(sortNames) {
+				m.message = successStyle.Render(fmt.Sprintf("✓ Sorted by %s (saved)", sortNames[sortOption]))
+			}
 		}
 	}
 	return m, nil
@@ -952,7 +1082,7 @@ func (m model) updateFinanceInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab": // Move to next field
 		m.saveCurrentField()
 		m.financeInputField++
-		if m.financeInputField > 2 { // Only 3 fields now (0, 1, 2)
+		if m.financeInputField > 3 { // Only 4 fields now (0, 1, 2, 3)
 			m.financeInputField = 0
 		}
 		m.loadFieldValue()
@@ -960,13 +1090,13 @@ func (m model) updateFinanceInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.saveCurrentField()
 		m.financeInputField--
 		if m.financeInputField < 0 { // Loop to last field
-			m.financeInputField = 2
+			m.financeInputField = 3
 		}
 		m.loadFieldValue()
 	case "enter":
 		// Save current field and move to next, or save service if on last field
 		m.saveCurrentField()
-		if m.financeInputField < 2 {
+		if m.financeInputField < 3 {
 			m.financeInputField++
 			m.loadFieldValue()
 		} else {
@@ -1004,6 +1134,12 @@ func (m *model) saveCurrentField() {
 				m.tempService.Prices.CMonthly = val
 			}
 		}
+	case 3: // Renewal Date
+		if value != "" {
+			if _, err := time.Parse("2006-01-02", value); err == nil {
+				m.tempService.RenewalDate = value
+			}
+		}
 	}
 }
 
@@ -1020,7 +1156,71 @@ func (m *model) loadFieldValue() {
 		} else {
 			m.input = ""
 		}
+	case 3: // Renewal Date
+		m.input = m.tempService.RenewalDate
 	}
+}
+
+// Helper function to renew a service based on its recurrence pattern
+func (m *model) renewService(index int) error {
+	if index < 0 || index >= len(m.financeData.Services) {
+		return fmt.Errorf("index out of range")
+	}
+
+	service := &m.financeData.Services[index]
+	currentDate, err := time.Parse("2006-01-02", service.RenewalDate)
+	if err != nil {
+		return fmt.Errorf("invalid renewal date format: %v", err)
+	}
+
+	var newDate time.Time
+	switch service.Recurrence {
+	case "M": // Monthly
+		newDate = currentDate.AddDate(0, 1, 0)
+	case "Y": // Yearly
+		newDate = currentDate.AddDate(1, 0, 0)
+	case "2Y": // Bi-yearly
+		newDate = currentDate.AddDate(2, 0, 0)
+	default:
+		// Default to monthly if recurrence is unknown
+		newDate = currentDate.AddDate(0, 1, 0)
+	}
+
+	service.RenewalDate = newDate.Format("2006-01-02")
+	return nil
+}
+
+// Helper function to apply sorting to services
+func (m *model) applySorting() {
+	if m.sortMode == 0 {
+		// No sorting - use original order
+		m.services = m.financeData.GetActiveServices()
+		return
+	}
+
+	services := m.financeData.GetActiveServices()
+
+	switch m.sortMode {
+	case 1: // Sort by renewal date
+		sort.Slice(services, func(i, j int) bool {
+			dateI, errI := time.Parse("2006-01-02", services[i].RenewalDate)
+			dateJ, errJ := time.Parse("2006-01-02", services[j].RenewalDate)
+			if errI != nil || errJ != nil {
+				return services[i].Name < services[j].Name // Fallback to name sort
+			}
+			return dateI.Before(dateJ)
+		})
+	case 2: // Sort by monthly price
+		sort.Slice(services, func(i, j int) bool {
+			return services[i].GetMonthlyCost() < services[j].GetMonthlyCost()
+		})
+	case 3: // Sort by yearly price
+		sort.Slice(services, func(i, j int) bool {
+			return services[i].GetYearlyCost() < services[j].GetYearlyCost()
+		})
+	}
+
+	m.services = services
 }
 
 // Helper function to save the service
@@ -1359,11 +1559,14 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 	totalMonthly := 0.0
 	totalYearly := 0.0
 	for _, service := range m.services {
-		if service.Status == 1 {
+		if service.IsActive() { // Use new method instead of Status check
 			totalMonthly += service.GetMonthlyCost()
 			totalYearly += service.GetYearlyCost()
 		}
 	}
+
+	// Get service counts for summary
+	activeCount, cancelledCount, totalCount := m.financeData.GetServiceCount()
 
 	// Fixed number of services displayed - consistent scrolling experience
 	maxVisible := 40
@@ -1413,16 +1616,16 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		service := m.services[i]
 
 		// Text truncation to fit fixed column widths
-		var maxNameWidth, maxTagWidth int
+		var maxNameWidth, maxYearlyWidth int
 		if m.terminalWidth > 120 {
 			maxNameWidth = 25
-			maxTagWidth = 15
+			maxYearlyWidth = 18
 		} else if m.terminalWidth < 80 {
 			maxNameWidth = 20
-			maxTagWidth = 12
+			maxYearlyWidth = 15
 		} else {
 			maxNameWidth = 22
-			maxTagWidth = 14
+			maxYearlyWidth = 16
 		}
 
 		name := service.Name
@@ -1430,12 +1633,39 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 			name = name[:maxNameWidth-3] + "..."
 		}
 
-		tag := service.Tags
-		if len(tag) > maxTagWidth {
-			tag = tag[:maxTagWidth-3] + "..."
+		// Get yearly pricing instead of tags
+		yearly := service.GetYearlyCost()
+		yearlyDisplay := fmt.Sprintf("%.2f PLN/yr", yearly)
+		if len(yearlyDisplay) > maxYearlyWidth {
+			yearlyDisplay = fmt.Sprintf("%.0f PLN/yr", yearly)
+		}
+
+		// Get color-coded recurrence indicator
+		var recurrenceIndicator string
+		switch service.Recurrence {
+		case "Y", "2Y":
+			recurrenceIndicator = yearlyStyle.Render("Y")
+		case "M":
+			recurrenceIndicator = monthlyStyle.Render("M")
+		default:
+			recurrenceIndicator = monthlyStyle.Render("M") // Default to monthly style
 		}
 
 		monthly := service.GetMonthlyCost()
+
+		// Dynamic price coloring based on recurrence
+		var monthlyDisplay, yearlyStyled string
+		isYearlyBilling := service.Recurrence == "Y" || service.Recurrence == "2Y"
+
+		if isYearlyBilling {
+			// Yearly billing - highlight yearly price, dim monthly
+			yearlyStyled = primaryPriceStyle.Render(yearlyDisplay)
+			monthlyDisplay = secondaryPriceStyle.Render(fmt.Sprintf("%.2f PLN/mo", monthly))
+		} else {
+			// Monthly billing - highlight monthly price, dim yearly
+			yearlyStyled = secondaryPriceStyle.Render(yearlyDisplay)
+			monthlyDisplay = primaryPriceStyle.Render(fmt.Sprintf("%.2f PLN/mo", monthly))
+		}
 
 		// Renewal date truncation for fixed column width
 		renewal := service.GetRenewalInfo()
@@ -1458,17 +1688,17 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 		// Create clean matrix/table format with fixed column widths
 		var boxContent string
 		if m.terminalWidth > 120 {
-			// Wide terminal - detailed matrix layout
-			boxContent = fmt.Sprintf("%s %3d. %-25s | %-15s | %8.2f PLN/mo | %-20s",
-				statusIndicator, i+1, name, tag, monthly, renewal)
+			// Wide terminal - detailed matrix layout with dynamic price coloring
+			boxContent = fmt.Sprintf("%s %3d. %-25s | %s %-26s | %-18s | %-20s",
+				statusIndicator, i+1, name, recurrenceIndicator, yearlyStyled, monthlyDisplay, renewal)
 		} else if m.terminalWidth < 80 {
-			// Narrow terminal - compact matrix layout
-			boxContent = fmt.Sprintf("%s %2d. %-20s | %-12s | %6.0f PLN",
-				statusIndicator, i+1, name, tag, monthly)
+			// Narrow terminal - compact matrix layout with recurrence indicator
+			boxContent = fmt.Sprintf("%s %2d. %-20s | %s %-23s | %-15s",
+				statusIndicator, i+1, name, recurrenceIndicator, yearlyStyled, monthlyDisplay)
 		} else {
-			// Standard terminal - balanced matrix layout
-			boxContent = fmt.Sprintf("%s %2d. %-22s | %-14s | %7.2f PLN/mo | %-18s",
-				statusIndicator, i+1, name, tag, monthly, renewal)
+			// Standard terminal - balanced matrix layout with dynamic price coloring
+			boxContent = fmt.Sprintf("%s %2d. %-22s | %s %-24s | %-16s | %-18s",
+				statusIndicator, i+1, name, recurrenceIndicator, yearlyStyled, monthlyDisplay, renewal)
 		}
 
 		// Minimalistic service rendering without boxes
@@ -1491,19 +1721,42 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 	// Dynamic status line based on terminal width
 	var statusLine string
 	if m.terminalWidth > 100 {
-		// Wide terminal - show full status
-		statusLine = fmt.Sprintf("Service %d of %d | %.2f PLN/month | j/k:navigate l:view e:edit d:delete h:back",
-			m.cursor+1, len(m.services), totalMonthly)
+		// Wide terminal - show full status with cancelled count
+		statusLine = fmt.Sprintf("Active: %d/%d | Cancelled: %d | %.2f PLN/mo | j/k:nav l:view e:edit r:renew c:cancel s:sort d:delete h:back",
+			activeCount, totalCount, cancelledCount, totalMonthly)
 	} else if m.terminalWidth < 80 {
 		// Narrow terminal - minimal status
-		statusLine = fmt.Sprintf("%d/%d | %.0f PLN | j/k/l/e/d/h",
-			m.cursor+1, len(m.services), totalMonthly)
+		statusLine = fmt.Sprintf("%d/%d | %d cancelled | %.0f PLN | j/k/l/e/r/c/s/d/h",
+			activeCount, totalCount, cancelledCount, totalMonthly)
 	} else {
 		// Standard terminal - balanced status
-		statusLine = fmt.Sprintf("Service %d/%d | %.0f PLN/mo | j/k:nav l:view e:edit d:del h:back",
-			m.cursor+1, len(m.services), totalMonthly)
+		statusLine = fmt.Sprintf("Active: %d/%d | Cancelled: %d | %.0f PLN/mo | j/k:nav l:view e:edit r:renew c:cancel s:sort d:del h:back",
+			activeCount, totalCount, cancelledCount, totalMonthly)
 	}
 	s.WriteString(infoStyle.Render(statusLine))
+
+	// Show sorting menu if active
+	if m.showSortMenu {
+		s.WriteString("\n")
+		currentSort := []string{"original order", "renewal date", "monthly price", "yearly price"}
+		currentSortName := "unknown"
+		if m.sortMode >= 0 && m.sortMode < len(currentSort) {
+			currentSortName = currentSort[m.sortMode]
+		}
+
+		s.WriteString(headerStyle.Render(fmt.Sprintf("📊 Sort Options (current: %s):", currentSortName)))
+		s.WriteString("\n")
+		s.WriteString(menuStyle.Render("0. Clear sorting (original order)"))
+		s.WriteString("\n")
+		s.WriteString(menuStyle.Render("1. Sort by renewal date"))
+		s.WriteString("\n")
+		s.WriteString(menuStyle.Render("2. Sort by monthly price"))
+		s.WriteString("\n")
+		s.WriteString(menuStyle.Render("3. Sort by yearly price"))
+		s.WriteString("\n")
+		s.WriteString(infoStyle.Render("Press 0-3 to select, 's' to cancel"))
+	}
+
 	return s.String()
 }
 
@@ -1559,6 +1812,7 @@ func (m model) renderHorizontalInput(s *strings.Builder) string {
 		{"Name", m.tempService.Name},
 		{"Tag", m.tempService.Tags},
 		{"Monthly", fmt.Sprintf("%.2f", m.tempService.Prices.CMonthly)},
+		{"Renewal Date", m.tempService.RenewalDate},
 	}
 
 	for i, field := range fields {
@@ -1597,6 +1851,7 @@ func (m model) renderTerminalPrompt(s *strings.Builder) string {
 		"Service name?",
 		"Category?",
 		"Monthly cost?",
+		"Renewal date (YYYY-MM-DD)?",
 	}
 
 	if m.financeInputField < len(prompts) {

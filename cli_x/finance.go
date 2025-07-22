@@ -20,7 +20,8 @@ type Service struct {
 	Prices       Prices `yaml:"prices"`
 	Recurrence   string `yaml:"recurrence"`
 	RenewalDate  string `yaml:"renewal_date"`
-	Status       int    `yaml:"status"`
+	Status       int    `yaml:"status"` // Keep for backward compatibility
+	State        string `yaml:"state"`  // New: "active", "cancelled", "inactive"
 	Student      bool   `yaml:"student"`
 	TrialEndDate string `yaml:"trial_end_date"`
 	BankService  string `yaml:"bank_service"`
@@ -44,6 +45,11 @@ func loadFinanceData() (*FinanceData, error) {
 	err = yaml.Unmarshal(data, &financeData)
 	if err != nil {
 		return nil, err
+	}
+
+	// Ensure state consistency for all services (backward compatibility)
+	for i := range financeData.Services {
+		financeData.Services[i].EnsureStateConsistency()
 	}
 
 	return &financeData, nil
@@ -82,10 +88,65 @@ func (s *Service) GetYearlyCost() float64 {
 }
 
 func (s *Service) GetStatusText() string {
+	// Use new State field if available, otherwise fall back to Status
+	if s.State != "" {
+		switch s.State {
+		case "active":
+			return "Active"
+		case "cancelled":
+			return "Cancelled"
+		case "inactive":
+			return "Inactive"
+		default:
+			return "Unknown"
+		}
+	}
+
+	// Backward compatibility with old Status field
 	if s.Status == 1 {
 		return "Active"
 	}
 	return "Inactive"
+}
+
+func (s *Service) IsActive() bool {
+	// Use new State field if available, otherwise fall back to Status
+	if s.State != "" {
+		return s.State == "active"
+	}
+
+	// Backward compatibility with old Status field
+	return s.Status == 1
+}
+
+func (s *Service) IsCancelled() bool {
+	return s.State == "cancelled"
+}
+
+func (s *Service) SetActive() {
+	s.State = "active"
+	s.Status = 1 // Keep old field in sync
+}
+
+func (s *Service) SetCancelled() {
+	s.State = "cancelled"
+	s.Status = 0 // Keep old field in sync
+}
+
+func (s *Service) SetInactive() {
+	s.State = "inactive"
+	s.Status = 0 // Keep old field in sync
+}
+
+func (s *Service) EnsureStateConsistency() {
+	// If State is empty, initialize from Status for backward compatibility
+	if s.State == "" {
+		if s.Status == 1 {
+			s.State = "active"
+		} else {
+			s.State = "inactive"
+		}
+	}
 }
 
 func (s *Service) GetRenewalInfo() string {
@@ -143,7 +204,7 @@ func (data *FinanceData) GetServicesByTag(tag string) []Service {
 func (data *FinanceData) GetTotalMonthlyCost() float64 {
 	total := 0.0
 	for _, service := range data.Services {
-		if service.Status == 1 {
+		if service.IsActive() {
 			total += service.GetMonthlyCost()
 		}
 	}
@@ -153,7 +214,7 @@ func (data *FinanceData) GetTotalMonthlyCost() float64 {
 func (data *FinanceData) GetTotalYearlyCost() float64 {
 	total := 0.0
 	for _, service := range data.Services {
-		if service.Status == 1 {
+		if service.IsActive() {
 			total += service.GetYearlyCost()
 		}
 	}
@@ -193,4 +254,52 @@ func (data *FinanceData) DeleteService(index int) error {
 	}
 	data.Services = append(data.Services[:index], data.Services[index+1:]...)
 	return nil
+}
+
+func (data *FinanceData) CancelService(index int) error {
+	if index < 0 || index >= len(data.Services) {
+		return fmt.Errorf("index out of range")
+	}
+	data.Services[index].SetCancelled()
+	return nil
+}
+
+func (data *FinanceData) ActivateService(index int) error {
+	if index < 0 || index >= len(data.Services) {
+		return fmt.Errorf("index out of range")
+	}
+	data.Services[index].SetActive()
+	return nil
+}
+
+func (data *FinanceData) GetActiveServices() []Service {
+	var activeServices []Service
+	for _, service := range data.Services {
+		if service.IsActive() {
+			activeServices = append(activeServices, service)
+		}
+	}
+	return activeServices
+}
+
+func (data *FinanceData) GetCancelledServices() []Service {
+	var cancelledServices []Service
+	for _, service := range data.Services {
+		if service.IsCancelled() {
+			cancelledServices = append(cancelledServices, service)
+		}
+	}
+	return cancelledServices
+}
+
+func (data *FinanceData) GetServiceCount() (active, cancelled, total int) {
+	for _, service := range data.Services {
+		if service.IsActive() {
+			active++
+		} else if service.IsCancelled() {
+			cancelled++
+		}
+		total++
+	}
+	return active, cancelled, total
 }
