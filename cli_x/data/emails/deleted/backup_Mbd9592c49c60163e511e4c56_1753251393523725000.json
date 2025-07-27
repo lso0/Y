@@ -1,0 +1,47 @@
+{
+  "id": "backup_Mbd9592c49c60163e511e4c56_1753251393523725000",
+  "backup_date": "2025-07-23T08:16:33.523729+02:00",
+  "email_data": {
+    "id": "Mbd9592c49c60163e511e4c56",
+    "subject": "Potwierdź swój adres e-mail powiązany z kontem My Bose",
+    "from": [
+      {
+        "name": "E-mail BOSE",
+        "email": "no-reply@bose.com"
+      }
+    ],
+    "to": [
+      {
+        "name": "",
+        "email": "lsy@fastmail.com"
+      }
+    ],
+    "receivedAt": "2025-07-22T16:26:36Z",
+    "preview": "Jesteś prawie u celu. Kliknij łącze znajdujące się w środku, aby aktywować swoje konto. Witamy w My Bose Potwierdź adres e-mail TO JUŻ PRAWIE WSZYSTKO! Potwierdź swój adres e-mail za pomocą poniższego łącza, aby ukończyć proces rejestracji",
+    "keywords": {
+      "$seen": true,
+      "$x-me-annot-2": true
+    }
+  },
+  "summary": {
+    "ID": "Mbd9592c49c60163e511e4c56",
+    "Subject": "Potwierdź swój adres e-mail powiązany z kontem My Bose",
+    "From": "E-mail BOSE",
+    "To": "lsy@fastmail.com",
+    "Date": "2025-07-22T16:26:36Z",
+    "Preview": "Jesteś prawie u celu. Kliknij łącze znajdujące się w środku, aby aktywować swoje konto. Witamy w My Bose Potwierdź adres e-mail TO JUŻ PRAWIE WSZYSTKO! Potwierdź swój adres e-mail za pomocą poniższego łącza, aby ukończyć proces rejestracji",
+    "IsUnread": false,
+    "ToAlias": "lsy@fastmail.com",
+    "Recipients": [
+      "lsy@fastmail.com"
+    ],
+    "Mailbox": "inbox"
+  },
+  "source": "inbox",
+  "backup_reason": "deleted",
+  "metadata": {
+    "backup_version": "1.0",
+    "original_mailbox": "inbox",
+    "size_bytes": 256
+  }
+}

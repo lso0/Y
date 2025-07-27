@@ -52,6 +52,9 @@ const (
 	aliasMenu
 	aliasList
 	aliasAdd
+	// Enhanced email states
+	enhancedEmailView
+	enhancedEmailTTS
 )
 
 type model struct {
@@ -124,10 +127,27 @@ type model struct {
 	emailAnalytics *EmailAnalytics
 	currentMailbox string // "inbox", "spam", "trash"
 
+	// Email backup system
+	emailBackupManager *EmailBackupManager
+
 	// Auto-clearing notification system
 	notificationTimer *time.Timer
 	notificationText  string
 	showNotification  bool
+
+	// Help menu system
+	showHelp bool
+
+	// Text-to-Speech system
+	ttsEngine           *TTSEngine
+	currentEmailContent string
+	currentEmailSubject string
+	currentEmailFrom    string
+
+	// Enhanced email reading system
+	enhancedEmailReader  *fm.EnhancedEmailReader
+	currentEnhancedEmail *fm.EnhancedEmailContent
+	showEnhancedView     bool
 }
 
 var (
@@ -187,13 +207,9 @@ var (
 			Margin(0, 0, 1, 0)
 
 	emailSelectedStyle = lipgloss.NewStyle().
-				Foreground(textColor).
-				Background(secondaryColor).
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(accentColor).
-				Padding(0, 2).
-				Margin(0, 0, 1, 0).
-				Bold(true)
+				Foreground(lipgloss.Color("#000000")). // Black text
+				Background(lipgloss.Color("#FBBF24")). // Bright yellow background (same as primary price)
+				Bold(true)                             // Bold text for prominence - NO BORDER, NO PADDING
 
 	unreadStyle = lipgloss.NewStyle().
 			Foreground(warningColor).
@@ -275,6 +291,12 @@ var (
 				Bold(false).
 				Italic(true).
 				Padding(0, 1) // Add padding around text
+
+	// Email box styles - Similar to finance pricing system
+	normalEmailStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#E2E8F0")). // Light gray text
+				Background(lipgloss.Color("#1A202C")). // Dark background
+				Bold(false)                            // Normal weight - NO BORDER, NO PADDING
 )
 
 func initialModel() model {
@@ -287,17 +309,19 @@ func initialModel() model {
 	choices := []string{"FM", "Dev", "Finance", "Knowledge"}
 
 	return model{
-		state:          mainMenu,
-		choices:        choices,
-		cursor:         0,
-		config:         config,
-		terminalWidth:  80,                       // Default width
-		terminalHeight: 24,                       // Default height
-		sortMode:       config.Settings.SortMode, // Load persistent sort mode
-		showSortMenu:   false,
-		analytics:      NewFinanceAnalytics(), // Initialize AI analytics
-		emailAnalytics: NewEmailAnalytics(),   // Initialize email AI analytics
-		currentMailbox: "inbox",               // Default mailbox
+		state:               mainMenu,
+		choices:             choices,
+		cursor:              0,
+		config:              config,
+		terminalWidth:       80,                       // Default width
+		terminalHeight:      24,                       // Default height
+		sortMode:            config.Settings.SortMode, // Load persistent sort mode
+		showSortMenu:        false,
+		analytics:           NewFinanceAnalytics(),       // Initialize AI analytics
+		emailAnalytics:      NewEmailAnalytics(),         // Initialize email AI analytics
+		currentMailbox:      "inbox",                     // Default mailbox
+		ttsEngine:           NewTTSEngine(),              // Initialize text-to-speech
+		enhancedEmailReader: fm.NewEnhancedEmailReader(), // Initialize enhanced email reader
 	}
 }
 
@@ -368,6 +392,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateReadEmails(msg)
 		case viewEmail:
 			return m.updateViewEmail(msg)
+		case enhancedEmailView:
+			return m.updateEnhancedEmailView(msg)
+		case enhancedEmailTTS:
+			return m.updateEnhancedEmailTTS(msg)
 		case inputName, inputEmail, inputPassword, inputAPIKey:
 			return m.updateInput(msg)
 		}
@@ -379,6 +407,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.emails = msg.emails
 			m.emailClient = msg.client
+
+			// Initialize backup manager with the email client
+			if m.emailBackupManager == nil && msg.client != nil {
+				m.emailBackupManager = NewEmailBackupManager(msg.client)
+			}
+
 			m.emailPage = 0 // Reset to first page
 			m.cursor = 0    // Reset cursor to first email
 			m.message = ""
@@ -394,6 +428,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Clear the notification
 		m.showNotification = false
 		m.notificationText = ""
+		return m, nil
+	case ttsGeneratedMsg:
+		if msg.err != nil {
+			m.message = errorStyle.Render(fmt.Sprintf("TTS generation failed: %v", msg.err))
+		} else {
+			m.message = successStyle.Render("TTS generated successfully!")
+		}
 		return m, nil
 	}
 	return m, nil
@@ -707,7 +748,14 @@ func (m model) fetchEmails() tea.Cmd {
 			return emailFetchedMsg{err: err}
 		}
 
-		emails, err := client.GetInboxEmails(120) // Fetch 120 emails (3 pages of 40)
+		// Use the current mailbox instead of hardcoded inbox
+		var emails []fm.EmailSummary
+		if m.currentMailbox == "inbox" {
+			emails, err = client.GetInboxEmails(1000) // Fetch up to 1000 emails (flexible limit)
+		} else {
+			emails, err = client.GetMailboxEmails(m.currentMailbox, 1000)
+		}
+
 		if err != nil {
 			return emailFetchedMsg{err: err}
 		}
@@ -770,163 +818,125 @@ func (m model) updateReadEmails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
+	case "?": // Toggle help screen
+		m.showHelp = !m.showHelp
+		return m, nil
 	case "h": // Go back
-		// Save current email reading position and return to FM menu
 		m.state = fmMenu
 		m.cursor = m.fmMenuCursor
-		m.loading = false
 		if !m.config.HasAccount() {
 			m.choices = []string{"Setup Account"}
 		} else {
 			m.choices = []string{"Read Emails", "Aliases"}
 		}
-	case "j": // Move down
+	case "j": // Move down with smart page navigation
 		if m.cursor < len(m.emails)-1 {
 			m.cursor++
+
+			// Smart page switching: if we moved to an email not on current page, adjust page
+			emailsPerPage := 30
+			newPage := m.cursor / emailsPerPage
+			if newPage != m.emailPage {
+				m.emailPage = newPage
+			}
 		}
-	case "k": // Move up
+	case "k": // Move up with smart page navigation
 		if m.cursor > 0 {
 			m.cursor--
-		}
-	case "l": // View/Read email
-		if m.cursor < len(m.emails) {
-			// Track email reading for analytics
-			if m.emailAnalytics != nil && m.cursor < len(m.emails) {
-				email := m.emails[m.cursor]
-				metadata := map[string]interface{}{
-					"email_index": m.cursor,
-					"mailbox":     m.currentMailbox,
-				}
-				m.emailAnalytics.LogEmailEvent("read", email.ID, email.From, email.Subject,
-					email.To, m.currentMailbox, metadata)
+
+			// Smart page switching: if we moved to an email not on current page, adjust page
+			emailsPerPage := 30
+			newPage := m.cursor / emailsPerPage
+			if newPage != m.emailPage {
+				m.emailPage = newPage
 			}
-			// Switch to viewEmail state
-			m.state = viewEmail
 		}
+	case "l": // Select/View email with enhanced reading
+		if m.cursor < len(m.emails) {
+			selectedEmailSummary := m.emails[m.cursor]
+			// Use enhanced email reader
+			enhancedContent, err := m.enhancedEmailReader.ReadEmailWithFullContent(selectedEmailSummary.ID, m.currentMailbox)
+			if err != nil {
+				m.message = errorStyle.Render(fmt.Sprintf("Enhanced reading failed: %v", err))
+				return m, nil
+			}
+
+			m.currentEnhancedEmail = enhancedContent
+			m.state = enhancedEmailView
+			m.cursor = 0
+			m.message = ""
+		}
+	case "r": // Refresh emails
+		m.loading = true
+		m.message = infoStyle.Render("🔄 Refreshing emails...")
+		return m, m.fetchEmails()
 	case "d": // Delete email
-		if m.cursor < len(m.emails) {
-			// Track email deletion for analytics
-			if m.emailAnalytics != nil {
-				email := m.emails[m.cursor]
-				metadata := map[string]interface{}{
-					"email_index": m.cursor,
-					"mailbox":     m.currentMailbox,
-					"delete_from": m.currentMailbox,
-				}
-				m.emailAnalytics.LogEmailEvent("delete", email.ID, email.From, email.Subject,
-					email.To, m.currentMailbox, metadata)
-			}
-
-			// TODO: Implement actual email deletion via FastMail API
-			m.message = successStyle.Render("✓ Email deleted (API integration needed)")
-
-			// Remove from local list for now
-			if m.cursor < len(m.emails) {
+		if m.cursor < len(m.emails) && m.emailClient != nil {
+			selectedEmail := m.emails[m.cursor]
+			err := m.emailClient.DeleteEmail(selectedEmail.ID)
+			if err != nil {
+				m.message = errorStyle.Render(fmt.Sprintf("Failed to delete email: %v", err))
+			} else {
+				// Remove from local list
 				m.emails = append(m.emails[:m.cursor], m.emails[m.cursor+1:]...)
 				if m.cursor >= len(m.emails) && len(m.emails) > 0 {
 					m.cursor = len(m.emails) - 1
-				} else if len(m.emails) == 0 {
-					m.cursor = 0
+				}
+				m.message = successStyle.Render("✓ Email deleted successfully!")
+
+				// Update analytics
+				if m.emailAnalytics != nil {
+					metadata := map[string]interface{}{
+						"mailbox": m.currentMailbox,
+					}
+					m.emailAnalytics.LogEmailEvent("delete", selectedEmail.ID, selectedEmail.From, selectedEmail.Subject,
+						selectedEmail.To, m.currentMailbox, metadata)
 				}
 			}
 		}
-	case "r": // Reply to email
-		if m.cursor < len(m.emails) {
-			// Track reply action for analytics
-			if m.emailAnalytics != nil {
-				email := m.emails[m.cursor]
-				metadata := map[string]interface{}{
-					"email_index": m.cursor,
-					"mailbox":     m.currentMailbox,
+	case "b": // Backup emails
+		if m.emailBackupManager != nil {
+			if len(m.emails) > 0 {
+				err := m.emailBackupManager.BackupEmail(m.emails[m.cursor], m.currentMailbox)
+				if err != nil {
+					m.message = errorStyle.Render(fmt.Sprintf("Backup failed: %v", err))
+				} else {
+					return m, m.showNotificationFor("✓ Email backed up!", 3*time.Second)
 				}
-				m.emailAnalytics.LogEmailEvent("reply", email.ID, email.From, email.Subject,
-					email.To, m.currentMailbox, metadata)
+			} else {
+				m.message = errorStyle.Render("No emails to backup")
 			}
-
-			// TODO: Implement reply functionality
-			m.message = infoStyle.Render("📝 Reply feature coming soon!")
 		}
-	case "x": // Refresh emails
-		if m.config.HasAccount() {
-			// Track refresh action
-			if m.emailAnalytics != nil {
-				metadata := map[string]interface{}{
-					"mailbox":     m.currentMailbox,
-					"email_count": len(m.emails),
-				}
-				m.emailAnalytics.LogEmailEvent("refresh", "", "", "", "", m.currentMailbox, metadata)
-			}
-
-			m.loading = true
-			m.message = infoStyle.Render("🔄 Refreshing emails...")
-			return m, m.fetchEmails()
-		}
-	case "1": // Switch to Inbox
-		if m.currentMailbox != "inbox" {
-			// Track mailbox switch
-			if m.emailAnalytics != nil {
-				metadata := map[string]interface{}{
-					"from_mailbox": m.currentMailbox,
-					"to_mailbox":   "inbox",
-				}
-				m.emailAnalytics.LogEmailEvent("switch_mailbox", "", "", "", "", "inbox", metadata)
-			}
-
-			m.currentMailbox = "inbox"
-			m.cursor = 0
-			m.loading = true
-			m.message = infoStyle.Render("📥 Switching to Inbox...")
-			return m, m.fetchEmails()
-		}
-	case "2": // Switch to Spam
-		if m.currentMailbox != "spam" {
-			// Track mailbox switch
-			if m.emailAnalytics != nil {
-				metadata := map[string]interface{}{
-					"from_mailbox": m.currentMailbox,
-					"to_mailbox":   "spam",
-				}
-				m.emailAnalytics.LogEmailEvent("switch_mailbox", "", "", "", "", "spam", metadata)
-			}
-
+	case "m": // Switch mailbox
+		switch m.currentMailbox {
+		case "inbox":
 			m.currentMailbox = "spam"
-			m.cursor = 0
-			m.loading = true
-			m.message = infoStyle.Render("🚫 Switching to Spam...")
-			return m, m.fetchEmails()
-		}
-	case "3": // Switch to Trash
-		if m.currentMailbox != "trash" {
-			// Track mailbox switch
-			if m.emailAnalytics != nil {
-				metadata := map[string]interface{}{
-					"from_mailbox": m.currentMailbox,
-					"to_mailbox":   "trash",
-				}
-				m.emailAnalytics.LogEmailEvent("switch_mailbox", "", "", "", "", "trash", metadata)
-			}
-
+			m.message = infoStyle.Render("📂 Switched to Spam folder")
+		case "spam":
 			m.currentMailbox = "trash"
-			m.cursor = 0
-			m.loading = true
-			m.message = infoStyle.Render("🗑️ Switching to Trash...")
-			return m, m.fetchEmails()
+			m.message = infoStyle.Render("📂 Switched to Trash folder")
+		case "trash":
+			m.currentMailbox = "inbox"
+			m.message = infoStyle.Render("📂 Switched to Inbox folder")
 		}
+		// Refresh emails for new mailbox
+		m.loading = true
+		return m, m.fetchEmails()
 	case "shift+1", "!":
 		// Go to page 1
 		m.emailPage = 0
 		m.cursor = 0
 	case "shift+2", "@":
 		// Go to page 2
-		if len(m.emails) > 40 {
+		if len(m.emails) > 30 {
 			m.emailPage = 1
-			m.cursor = 40 // Start of page 2
+			m.cursor = 30 // Start of page 2
 		}
 	case "shift+3", "#":
 		// Go to page 3
-		if len(m.emails) > 80 {
+		if len(m.emails) > 60 {
 			m.emailPage = 2
-			m.cursor = 80 // Start of page 3
+			m.cursor = 60 // Start of page 3
 		}
 	}
 	return m, nil
@@ -939,6 +949,34 @@ func (m model) updateViewEmail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h": // Go back
 		m.state = readEmails
 		// Keep cursor position when going back
+	case "s": // Speak email content with TTS
+		if m.ttsEngine != nil && m.ttsEngine.IsAvailable() {
+			go func() {
+				err := m.ttsEngine.SpeakEmailContent(
+					m.currentEmailSubject,
+					m.currentEmailFrom,
+					m.currentEmailContent,
+				)
+				if err != nil {
+					// Could log error but don't interrupt UI
+				}
+			}()
+			return m, m.showNotificationFor("🔊 Reading email aloud...", 3*time.Second)
+		} else {
+			return m, m.showNotificationFor("⚠️ TTS not available - install Coqui TTS", 4*time.Second)
+		}
+	case "x": // Stop TTS playback
+		if m.ttsEngine != nil {
+			m.ttsEngine.StopSpeaking()
+			return m, m.showNotificationFor("🔇 Stopped reading", 2*time.Second)
+		}
+	case "z": // Show TTS help
+		if !m.ttsEngine.IsAvailable() {
+			instructions := m.ttsEngine.InstallInstructions()
+			m.message = infoStyle.Render(instructions)
+		} else {
+			m.message = infoStyle.Render("🔊 TTS Controls: 's' = speak email, 'x' = stop, 'z' = help")
+		}
 	}
 	return m, nil
 }
@@ -1609,6 +1647,127 @@ func (m model) updateGHStarred(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) updateEnhancedEmailView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back to email list
+		m.state = readEmails
+		m.cursor = 0 // Reset cursor
+		m.currentEnhancedEmail = nil
+		m.message = ""
+	case "s": // Speak email with Dia TTS
+		if m.currentEnhancedEmail != nil {
+			m.state = enhancedEmailTTS
+			m.message = infoStyle.Render("🎤 Generating speech with Dia TTS...")
+			return m, m.generateEmailSpeech()
+		}
+	case "j": // Scroll down (if content is long)
+		// Could implement scrolling for long emails
+	case "k": // Scroll up
+		// Could implement scrolling for long emails
+	case "r": // Refresh enhanced content
+		if m.currentEnhancedEmail != nil {
+			enhancedContent, err := m.enhancedEmailReader.ReadEmailWithFullContent(m.currentEnhancedEmail.ID, m.currentMailbox)
+			if err != nil {
+				m.message = errorStyle.Render(fmt.Sprintf("Refresh failed: %v", err))
+			} else {
+				m.currentEnhancedEmail = enhancedContent
+				m.message = successStyle.Render("✓ Email content refreshed!")
+			}
+		}
+	case "a": // View attachments
+		if m.currentEnhancedEmail != nil && len(m.currentEnhancedEmail.Attachments) > 0 {
+			attachmentInfo := "📎 ATTACHMENTS:\n"
+			for i, att := range m.currentEnhancedEmail.Attachments {
+				attachmentInfo += fmt.Sprintf("%d. %s (%s, %d bytes)\n",
+					i+1, att.Filename, att.ContentType, att.Size)
+				if att.PreviewContent != "" {
+					attachmentInfo += fmt.Sprintf("   Preview: %s\n", att.PreviewContent[:min(100, len(att.PreviewContent))])
+				}
+			}
+			m.message = infoStyle.Render(attachmentInfo)
+		} else {
+			m.message = errorStyle.Render("No attachments found")
+		}
+	case "i": // View images
+		if m.currentEnhancedEmail != nil && (len(m.currentEnhancedEmail.Images) > 0 || len(m.currentEnhancedEmail.InlineImages) > 0) {
+			imageInfo := "🖼️ IMAGES:\n"
+			for i, img := range m.currentEnhancedEmail.Images {
+				imageInfo += fmt.Sprintf("%d. %s (%s, %d bytes)\n   Path: %s\n",
+					i+1, img.Filename, img.ContentType, img.Size, img.Path)
+			}
+			for i, img := range m.currentEnhancedEmail.InlineImages {
+				imageInfo += fmt.Sprintf("%d. %s [inline] (%s, %d bytes)\n   Path: %s\n",
+					len(m.currentEnhancedEmail.Images)+i+1, img.Filename, img.ContentType, img.Size, img.Path)
+			}
+			m.message = infoStyle.Render(imageInfo)
+		} else {
+			m.message = errorStyle.Render("No images found")
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateEnhancedEmailTTS(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "h": // Go back to enhanced email view
+		m.state = enhancedEmailView
+		m.message = ""
+	case "p": // Play generated audio (if available)
+		// This would be handled by the TTS result
+		m.message = infoStyle.Render("🔊 Playing audio...")
+	case "r": // Regenerate speech
+		if m.currentEnhancedEmail != nil {
+			m.message = infoStyle.Render("🎤 Regenerating speech...")
+			return m, m.generateEmailSpeech()
+		}
+	}
+	return m, nil
+}
+
+func (m model) generateEmailSpeech() tea.Cmd {
+	return func() tea.Msg {
+		if m.currentEnhancedEmail == nil {
+			return ttsGeneratedMsg{err: fmt.Errorf("no email content available")}
+		}
+
+		// Generate TTS audio
+		result, err := m.enhancedEmailReader.ConvertEmailToSpeech(
+			m.currentEnhancedEmail,
+			"",   // Let it generate temp file
+			true, // Play audio
+		)
+
+		if err != nil {
+			return ttsGeneratedMsg{err: err}
+		}
+
+		if !result.Success {
+			return ttsGeneratedMsg{err: fmt.Errorf(result.Error)}
+		}
+
+		return ttsGeneratedMsg{audioFile: result.AudioFile, success: true}
+	}
+}
+
+// Add this to the existing message types
+type ttsGeneratedMsg struct {
+	audioFile string
+	success   bool
+	err       error
+}
+
+// Helper function
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func (m model) View() string {
 	var s strings.Builder
 
@@ -1682,6 +1841,15 @@ func (m model) View() string {
 		} else {
 			return m.renderEmailMatrix(&s)
 		}
+
+	case viewEmail:
+		return m.renderFullEmail(&s)
+
+	case enhancedEmailView:
+		return m.viewEnhancedEmail()
+
+	case enhancedEmailTTS:
+		return m.viewEnhancedEmailTTS()
 
 	case viewAccount:
 		if m.config.HasAccount() {
@@ -2006,7 +2174,7 @@ func (m model) renderFinanceList(s *strings.Builder) string {
 
 	// Dynamic status line based on terminal width
 	var statusLine string
-	if m.terminalWidth > 100 {
+	if m.terminalWidth > 120 {
 		// Wide terminal - show full status with cancelled count
 		statusLine = fmt.Sprintf("Active: %d/%d | Cancelled: %d | %.2f PLN/mo | j/k:nav l:view e:edit r:renew c:cancel s:sort d:delete h:back",
 			activeCount, totalCount, cancelledCount, totalMonthly)
@@ -2162,8 +2330,13 @@ func (m model) renderEmailMatrix(s *strings.Builder) string {
 		return s.String()
 	}
 
-	// Page-based display - 40 emails per page
-	emailsPerPage := 40
+	// Show help menu if requested
+	if m.showHelp {
+		return m.renderEmailHelp(s)
+	}
+
+	// Page-based display - 30 emails per page
+	emailsPerPage := 30
 	totalPages := (len(m.emails) + emailsPerPage - 1) / emailsPerPage // Ceiling division
 
 	// Ensure current page is valid
@@ -2191,28 +2364,44 @@ func (m model) renderEmailMatrix(s *strings.Builder) string {
 		m.cursor = pageEnd
 	}
 
-	// Show page indicator at top
-	if totalPages > 1 {
-		pageInfo := fmt.Sprintf("Page %d of %d | Use Shift+1/2/3 to switch pages", m.emailPage+1, totalPages)
-		s.WriteString(infoStyle.Render(pageInfo))
-		s.WriteString("\n")
+	// Enhanced mailbox indicator at top
+	mailboxIcon := "📥"
+	switch m.currentMailbox {
+	case "inbox":
+		mailboxIcon = "📥"
+	case "spam":
+		mailboxIcon = "🚫"
+	case "trash":
+		mailboxIcon = "🗑️"
+	case "sent":
+		mailboxIcon = "📤"
+	case "drafts":
+		mailboxIcon = "📝"
 	}
 
-	// Display visible emails in matrix format
+	// Show current mailbox and switching options
+	mailboxInfo := fmt.Sprintf("%s %s | 1:📥 2:🚫 3:🗑️ 4:📤 5:📝", mailboxIcon, strings.Title(m.currentMailbox))
+	s.WriteString(headerStyle.Render(mailboxInfo))
+	s.WriteString("\n")
+
+	// Display visible emails in clean 3-row matrix format (like finance list)
 	for i := start; i < end; i++ {
 		email := m.emails[i]
 
 		// Text truncation to fit fixed column widths
-		var maxFromWidth, maxSubjectWidth int
+		var maxFromWidth, maxSubjectWidth, maxAliasWidth int
 		if m.terminalWidth > 120 {
 			maxFromWidth = 25
-			maxSubjectWidth = 50
+			maxSubjectWidth = 40
+			maxAliasWidth = 25
 		} else if m.terminalWidth < 80 {
 			maxFromWidth = 15
 			maxSubjectWidth = 25
+			maxAliasWidth = 15
 		} else {
 			maxFromWidth = 20
-			maxSubjectWidth = 35
+			maxSubjectWidth = 30
+			maxAliasWidth = 20
 		}
 
 		// From field truncation
@@ -2230,46 +2419,58 @@ func (m model) renderEmailMatrix(s *strings.Builder) string {
 			subjectDisplay = subjectDisplay[:maxSubjectWidth-3] + "..."
 		}
 
+		// Alias/To field processing and truncation (NEW COLUMN)
+		aliasDisplay := email.ToAlias
+		if aliasDisplay == "" {
+			aliasDisplay = email.To
+		}
+		if aliasDisplay == "" {
+			aliasDisplay = "unknown"
+		}
+		if len(aliasDisplay) > maxAliasWidth {
+			aliasDisplay = aliasDisplay[:maxAliasWidth-3] + "..."
+		}
+
 		// Date formatting
 		timeStr := email.Date.Format("15:04")
 		if !email.Date.Truncate(24 * time.Hour).Equal(time.Now().Truncate(24 * time.Hour)) {
 			timeStr = email.Date.Format("Jan 2")
 		}
 
-		// Unread status indicator (minimalistic)
+		// Unread status indicator
 		statusIndicator := "📖" // Read
 		if email.IsUnread {
 			statusIndicator = "📩" // Unread
 		}
 
-		// Create clean matrix/table format with fixed column widths
-		var boxContent string
+		// Create clean matrix format - single row like finance list but with alias column
+		var emailContent string
 		if m.terminalWidth > 120 {
-			// Wide terminal - detailed matrix layout
-			boxContent = fmt.Sprintf("%s %3d. %-25s | %-50s | %8s",
-				statusIndicator, i+1, fromDisplay, subjectDisplay, timeStr)
+			// Wide terminal - show all columns including alias
+			emailContent = fmt.Sprintf("%s %3d. %-25s | %-40s | %-8s | %-25s",
+				statusIndicator, i+1, fromDisplay, subjectDisplay, timeStr, aliasDisplay)
 		} else if m.terminalWidth < 80 {
-			// Narrow terminal - compact matrix layout
-			boxContent = fmt.Sprintf("%s %2d. %-15s | %-25s",
-				statusIndicator, i+1, fromDisplay, subjectDisplay)
-		} else {
-			// Standard terminal - balanced matrix layout
-			boxContent = fmt.Sprintf("%s %2d. %-20s | %-35s | %8s",
+			// Narrow terminal - compact layout
+			emailContent = fmt.Sprintf("%s %2d. %-15s | %-25s | %-6s",
 				statusIndicator, i+1, fromDisplay, subjectDisplay, timeStr)
+		} else {
+			// Standard terminal - balanced layout with alias
+			emailContent = fmt.Sprintf("%s %2d. %-20s | %-30s | %-8s | %-20s",
+				statusIndicator, i+1, fromDisplay, subjectDisplay, timeStr, aliasDisplay)
 		}
 
-		// Minimalistic email rendering without boxes
+		// Apply beautiful box styling based on selection (like finance pricing)
 		if m.cursor == i {
-			// Selected email - highlight with orange color
-			s.WriteString(selectedStyle.Render(boxContent))
+			// Selected email - prominent yellow box with border (like primary price)
+			s.WriteString(emailSelectedStyle.Render(emailContent))
 		} else {
-			// Unselected email - normal style
-			s.WriteString(menuStyle.Render(boxContent))
+			// Unselected email - subtle box with dark background (like secondary price)
+			s.WriteString(normalEmailStyle.Render(emailContent))
 		}
 		s.WriteString("\n")
 	}
 
-	// Dynamic status line based on terminal width
+	// Enhanced status line with clean format info and expanded mailbox options
 	unreadCount := 0
 	for _, email := range m.emails {
 		if email.IsUnread {
@@ -2278,17 +2479,17 @@ func (m model) renderEmailMatrix(s *strings.Builder) string {
 	}
 
 	var statusLine string
-	if m.terminalWidth > 100 {
-		// Wide terminal - show full status with page info
-		statusLine = fmt.Sprintf("Email %d of %d | Page %d/%d | %d unread | j/k:nav l:read Shift+1/2/3:page r:refresh h:back",
+	if m.terminalWidth > 120 {
+		// Wide terminal - show full status
+		statusLine = fmt.Sprintf("Email %d of %d | Page %d/%d | %d unread",
 			m.cursor+1, len(m.emails), m.emailPage+1, totalPages, unreadCount)
 	} else if m.terminalWidth < 80 {
 		// Narrow terminal - minimal status
-		statusLine = fmt.Sprintf("%d/%d | P%d/%d | %d unread | j/k/l/r/h/Shift+1-3",
+		statusLine = fmt.Sprintf("%d/%d | P%d/%d | %d unread",
 			m.cursor+1, len(m.emails), m.emailPage+1, totalPages, unreadCount)
 	} else {
 		// Standard terminal - balanced status
-		statusLine = fmt.Sprintf("Email %d/%d | Page %d/%d | %d unread | j/k:nav l:read Shift+1/2/3:page r:refresh h:back",
+		statusLine = fmt.Sprintf("Email %d/%d | Page %d/%d | %d unread",
 			m.cursor+1, len(m.emails), m.emailPage+1, totalPages, unreadCount)
 	}
 	s.WriteString(infoStyle.Render(statusLine))
@@ -2342,9 +2543,227 @@ func (m model) renderGitHubRepos(s *strings.Builder) string {
 	return s.String()
 }
 
+// renderEmailHelp displays all available commands and shortcuts
+func (m model) renderEmailHelp(s *strings.Builder) string {
+	s.WriteString(headerStyle.Render("📧 FastMail - Help & Commands"))
+	s.WriteString("\n\n")
+
+	s.WriteString(infoStyle.Render("Navigation:"))
+	s.WriteString("\n")
+	s.WriteString("  j/k       - Move up/down (smart page switching)")
+	s.WriteString("\n")
+	s.WriteString("  l         - 📖 View email with enhanced reader (full content + attachments)")
+	s.WriteString("\n")
+	s.WriteString("  h         - Go back to FastMail menu")
+	s.WriteString("\n\n")
+
+	s.WriteString(infoStyle.Render("Mailbox Switching:"))
+	s.WriteString("\n")
+	s.WriteString("  1         - Switch to 📥 Inbox")
+	s.WriteString("\n")
+	s.WriteString("  2         - Switch to 🚫 Spam")
+	s.WriteString("\n")
+	s.WriteString("  3         - Switch to 🗑️ Trash")
+	s.WriteString("\n")
+	s.WriteString("  4         - Switch to 📤 Sent")
+	s.WriteString("\n")
+	s.WriteString("  5         - Switch to 📝 Drafts")
+	s.WriteString("\n\n")
+
+	s.WriteString(infoStyle.Render("Email Actions:"))
+	s.WriteString("\n")
+	s.WriteString("  d         - Delete email (with automatic backup)")
+	s.WriteString("\n")
+	s.WriteString("  b         - Backup email (without deleting)")
+	s.WriteString("\n")
+	s.WriteString("  r         - Reply to email (coming soon)")
+	s.WriteString("\n")
+	s.WriteString("  x         - Refresh email list")
+	s.WriteString("\n")
+	s.WriteString("  m         - Switch mailbox view")
+	s.WriteString("\n\n")
+
+	s.WriteString(infoStyle.Render("Text-to-Speech (when viewing email):"))
+	s.WriteString("\n")
+	s.WriteString("  s         - 🔊 Speak email content aloud")
+	s.WriteString("\n")
+	s.WriteString("  x         - 🔇 Stop TTS playback")
+	s.WriteString("\n")
+	s.WriteString("  z         - 📋 TTS setup/help")
+	s.WriteString("\n\n")
+
+	s.WriteString(infoStyle.Render("Page Navigation:"))
+	s.WriteString("\n")
+	s.WriteString("  Shift+1   - Go to page 1")
+	s.WriteString("\n")
+	s.WriteString("  Shift+2   - Go to page 2")
+	s.WriteString("\n")
+	s.WriteString("  Shift+3   - Go to page 3")
+	s.WriteString("\n")
+	s.WriteString("  (Auto)    - j/k automatically switches pages")
+	s.WriteString("\n\n")
+
+	s.WriteString(infoStyle.Render("Other Commands:"))
+	s.WriteString("\n")
+	s.WriteString("  ?         - Toggle this help menu")
+	s.WriteString("\n")
+	s.WriteString("  ctrl+c    - Quit application")
+	s.WriteString("\n\n")
+
+	s.WriteString(successStyle.Render("💡 Tips:"))
+	s.WriteString("\n")
+	s.WriteString("• All deleted emails are automatically backed up to data/emails/")
+	s.WriteString("\n")
+	s.WriteString("• Smart navigation: j/k automatically switches pages when needed")
+	s.WriteString("\n")
+	s.WriteString("• Session analytics are recorded for AI training")
+	s.WriteString("\n")
+	s.WriteString("• 30 emails per page for optimal viewing")
+	s.WriteString("\n\n")
+
+	s.WriteString(infoStyle.Render("Press '?' to close help and return to emails"))
+	s.WriteString("\n")
+
+	return s.String()
+}
+
+// renderFullEmail displays the complete email content with TTS controls
+func (m model) renderFullEmail(s *strings.Builder) string {
+	// Email header
+	s.WriteString(headerStyle.Render("📧 Email Reader"))
+	s.WriteString("\n\n")
+
+	// Email metadata
+	s.WriteString(fmt.Sprintf("📤 From: %s\n", m.currentEmailFrom))
+	s.WriteString(fmt.Sprintf("📝 Subject: %s\n", m.currentEmailSubject))
+	s.WriteString("\n")
+
+	// Email content with scrollable view
+	contentStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#E2E8F0")).
+		Background(lipgloss.Color("#1A202C")).
+		Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#4A5568")).
+		Width(m.terminalWidth - 4).
+		Height(m.terminalHeight - 15) // Leave space for controls
+
+	// Wrap content for better display
+	wrappedContent := m.wrapEmailContent(m.currentEmailContent, m.terminalWidth-8)
+	s.WriteString(contentStyle.Render(wrappedContent))
+	s.WriteString("\n\n")
+
+	// TTS controls
+	ttsStatus := "🔇 TTS: Not Available"
+	if m.ttsEngine != nil && m.ttsEngine.IsAvailable() {
+		ttsStatus = "🔊 TTS: Ready"
+	}
+
+	s.WriteString(infoStyle.Render(ttsStatus))
+	s.WriteString("\n")
+
+	// Control instructions
+	controlsText := "Controls: s = 🔊 speak email | x = 🔇 stop | z = ❓ TTS help | h = ⬅ back"
+	if !m.ttsEngine.IsAvailable() {
+		controlsText = "Controls: z = 📋 TTS setup | h = ⬅ back"
+	}
+
+	s.WriteString(infoStyle.Render(controlsText))
+	s.WriteString("\n")
+
+	return s.String()
+}
+
+// wrapEmailContent wraps email content for better display
+func (m model) wrapEmailContent(content string, maxWidth int) string {
+	if content == "" {
+		return "No content available"
+	}
+
+	words := strings.Fields(content)
+	if len(words) == 0 {
+		return "No readable content"
+	}
+
+	var lines []string
+	var currentLine strings.Builder
+
+	for _, word := range words {
+		// If adding this word would exceed maxWidth, start a new line
+		if currentLine.Len()+len(word)+1 > maxWidth {
+			if currentLine.Len() > 0 {
+				lines = append(lines, currentLine.String())
+				currentLine.Reset()
+			}
+		}
+
+		if currentLine.Len() > 0 {
+			currentLine.WriteString(" ")
+		}
+		currentLine.WriteString(word)
+	}
+
+	// Add the last line if it has content
+	if currentLine.Len() > 0 {
+		lines = append(lines, currentLine.String())
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 func main() {
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// Add these view methods before the main() function
+
+func (m model) viewEnhancedEmail() string {
+	var s strings.Builder
+
+	if m.currentEnhancedEmail == nil {
+		s.WriteString(errorStyle.Render("No enhanced email content available"))
+		s.WriteString("\nPress 'h' to go back")
+		return s.String()
+	}
+
+	// Display enhanced email content
+	content := m.enhancedEmailReader.DisplayEnhancedEmailContent(m.currentEnhancedEmail)
+	s.WriteString(content)
+
+	// Add navigation help
+	s.WriteString("\n\n")
+	s.WriteString(titleStyle.Render("🔗 Navigation"))
+	s.WriteString("\n")
+	s.WriteString("h: Back | s: Speak with Dia TTS | a: View Attachments | i: View Images | r: Refresh\n")
+
+	return s.String()
+}
+
+func (m model) viewEnhancedEmailTTS() string {
+	var s strings.Builder
+
+	s.WriteString(titleStyle.Render("🎤 Dia TTS - Text to Speech"))
+	s.WriteString("\n\n")
+
+	if m.currentEnhancedEmail != nil {
+		s.WriteString(fmt.Sprintf("Subject: %s\n", m.currentEnhancedEmail.Subject))
+		s.WriteString(fmt.Sprintf("From: %s\n", m.currentEnhancedEmail.From))
+		s.WriteString("\n")
+		s.WriteString(infoStyle.Render("🎵 Generating ultra-realistic speech with Dia model..."))
+		s.WriteString("\n\n")
+		s.WriteString("This may take a moment for the first generation as the model loads.\n")
+		s.WriteString("Subsequent generations will be faster.\n")
+	} else {
+		s.WriteString(errorStyle.Render("No email content available for TTS"))
+	}
+
+	s.WriteString("\n\n")
+	s.WriteString(titleStyle.Render("🔗 Navigation"))
+	s.WriteString("\n")
+	s.WriteString("h: Back | p: Play Audio | r: Regenerate Speech\n")
+
+	return s.String()
 }

@@ -35,21 +35,34 @@ type EmailContextData struct {
 
 // EmailAnalytics handles email data collection and insights
 type EmailAnalytics struct {
-	eventsFile string
-	events     []EmailEvent
+	eventsFile    string
+	events        []EmailEvent
+	sessionStart  time.Time      // When FastMail session started
+	lastActivity  time.Time      // Last user activity
+	timeInMailbox map[string]int // Time spent in each mailbox (seconds)
+	actionCounts  map[string]int // Count of each action type
+	dailyUsage    map[string]int // Usage by day
 }
 
-// NewEmailAnalytics creates a new email analytics instance
+// NewEmailAnalytics creates a new email analytics instance with enhanced tracking
 func NewEmailAnalytics() *EmailAnalytics {
 	return &EmailAnalytics{
-		eventsFile: "email_analytics.jsonl", // JSON Lines format
-		events:     make([]EmailEvent, 0),
+		eventsFile:    "analytics/email_analytics.jsonl", // Store in analytics directory
+		events:        make([]EmailEvent, 0),
+		sessionStart:  time.Now(),
+		lastActivity:  time.Now(),
+		timeInMailbox: make(map[string]int),
+		actionCounts:  make(map[string]int),
+		dailyUsage:    make(map[string]int),
 	}
 }
 
-// LogEmailEvent records a user email action for AI analysis
+// LogEmailEvent records a user email action for AI analysis with enhanced tracking
 func (ea *EmailAnalytics) LogEmailEvent(action, messageID, sender, subject, toAlias, mailbox string, metadata map[string]interface{}) error {
 	now := time.Now()
+
+	// Update session tracking
+	ea.updateSessionTracking(action, mailbox, now)
 
 	event := EmailEvent{
 		ID:          fmt.Sprintf("email_%d", now.UnixNano()),
@@ -66,6 +79,56 @@ func (ea *EmailAnalytics) LogEmailEvent(action, messageID, sender, subject, toAl
 
 	// Append to JSONL file
 	return ea.appendEventToFile(event)
+}
+
+// updateSessionTracking tracks time spent and usage patterns
+func (ea *EmailAnalytics) updateSessionTracking(action, mailbox string, timestamp time.Time) {
+	// Track time spent in current mailbox
+	if ea.lastActivity.After(ea.sessionStart) {
+		timeSpent := int(timestamp.Sub(ea.lastActivity).Seconds())
+		ea.timeInMailbox[mailbox] += timeSpent
+	}
+
+	// Update activity counters
+	ea.actionCounts[action]++
+	dayKey := timestamp.Format("2006-01-02")
+	ea.dailyUsage[dayKey]++
+
+	// Update last activity time
+	ea.lastActivity = timestamp
+}
+
+// GetSessionData returns current session analytics for context
+func (ea *EmailAnalytics) GetSessionData() map[string]interface{} {
+	sessionLength := int(time.Since(ea.sessionStart).Minutes())
+
+	return map[string]interface{}{
+		"session_start":   ea.sessionStart,
+		"session_length":  sessionLength,
+		"time_in_mailbox": ea.timeInMailbox,
+		"action_counts":   ea.actionCounts,
+		"daily_usage":     ea.dailyUsage,
+		"last_activity":   ea.lastActivity,
+	}
+}
+
+// LogSessionEnd records when user exits FastMail for comprehensive session data
+func (ea *EmailAnalytics) LogSessionEnd() error {
+	sessionData := ea.GetSessionData()
+
+	return ea.LogEmailEvent("session_end", "", "", "", "", "", map[string]interface{}{
+		"session_data":  sessionData,
+		"total_actions": ea.getTotalActions(),
+	})
+}
+
+// getTotalActions returns total number of actions in this session
+func (ea *EmailAnalytics) getTotalActions() int {
+	total := 0
+	for _, count := range ea.actionCounts {
+		total += count
+	}
+	return total
 }
 
 // buildEmailContext captures the current email/system state

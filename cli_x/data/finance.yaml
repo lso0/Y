@@ -97,7 +97,7 @@ services:
         c_yearly: 149.99
       recurrence: "Y"
       renewal_date: "2025-08-23"
-      status: 1
+      status: 0
       state: active
       student: false
       trial_end_date: ""

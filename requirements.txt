@@ -1,3 +1,5 @@
+# 🚀 Multi-Service Automation Platform - Complete Dependencies
+
 # FastMail Automation Dependencies  
 playwright==1.42.0
 mitmproxy==10.2.2
@@ -23,8 +25,13 @@ requests==2.31.0
 # Environment and Configuration
 python-dotenv==1.0.0
 
-# Security - YubiKey Token Management
+# Security - YubiKey Token Management & Infisical
 cryptography==41.0.7
+infisical>=1.4.0
+yubikey-manager>=5.1.0
+
+# Enhanced Email Reading Dependencies
+html2text>=2020.1.16
 
 # Image processing - updated for Python 3.13 compatibility
 pillow>=10.2.0
@@ -33,4 +40,14 @@ pillow>=10.2.0
 aiofiles==23.2.0
 
 # Web crawling
-firecrawl-py>=0.1.0 
+firecrawl-py>=0.1.0
+
+# 🎤 Dia TTS Engine Dependencies (Enhanced Email TTS)
+torch>=2.0.0
+transformers>=4.35.0
+accelerate>=0.21.0
+torchaudio>=2.0.0
+
+# Audio processing (optional, for better audio handling)
+librosa>=0.10.0
+soundfile>=0.12.0 
