@@ -216,7 +216,7 @@ services:
         c_monthly: 99.99
         c_yearly: 0
       recurrence: M
-      renewal_date: "2025-07-28"
+      renewal_date: "2025-08-28"
       status: 1
       state: active
       student: false

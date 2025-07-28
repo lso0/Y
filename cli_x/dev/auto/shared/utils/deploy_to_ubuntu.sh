@@ -42,7 +42,7 @@ source venv/bin/activate
 # Install Python dependencies
 echo "📦 Installing Python packages..."
 pip install --upgrade pip
-pip install fastapi==0.104.1 uvicorn==0.24.0 playwright==1.42.0 pydantic==2.5.0 requests==2.31.0 python-multipart==0.0.6
+pip install fastapi==0.104.1 uvicorn==0.24.0 playwright==1.42.0 pydantic==2.5.0 requests==2.31.0 python-multipart==0.0.6 python-dotenv
 
 # Install Playwright browsers
 echo "🌐 Installing Playwright browsers..."
@@ -78,23 +78,64 @@ sudo systemctl enable automation-server
 CURRENT_DIR=$(pwd)
 echo "📁 Current directory: $CURRENT_DIR"
 
-if [[ "$CURRENT_DIR" == *"/cli_x/dev/auto/a_1" ]]; then
-    echo "✅ Detected automation files in current directory"
+# Updated path detection for new structure
+if [[ "$CURRENT_DIR" == *"/cli_x/dev/auto/services/fastmail"* ]] || [[ "$CURRENT_DIR" == *"/cli_x/dev/auto/shared/utils"* ]] || [[ -d "../../services/fastmail" ]]; then
+    echo "✅ Detected enhanced automation files structure"
     
-    # Copy automation files to project directory
-    echo "📂 Copying automation files..."
-    cp automation_server.py $PROJECT_DIR/
-    cp session_monitor.py $PROJECT_DIR/
-    cp test_server.py $PROJECT_DIR/
-    cp automation_client.py $PROJECT_DIR/
-    cp server_requirements.txt $PROJECT_DIR/
+    # Copy enhanced automation files to project directory
+    echo "📂 Copying enhanced automation files..."
     
-    echo "✅ Files copied successfully!"
+    # Find the correct paths relative to current location
+    if [[ "$CURRENT_DIR" == *"/shared/utils"* ]]; then
+        # We're in shared/utils, so services/fastmail is at ../../services/fastmail
+        FASTMAIL_DIR="../../services/fastmail"
+    elif [[ "$CURRENT_DIR" == *"/services/fastmail"* ]]; then
+        # We're already in fastmail directory
+        FASTMAIL_DIR="."
+    else
+        # Try to find the fastmail directory
+        FASTMAIL_DIR=$(find . -path "*/services/fastmail" -type d | head -1)
+        if [[ -z "$FASTMAIL_DIR" ]]; then
+            FASTMAIL_DIR="cli_x/dev/auto/services/fastmail"
+        fi
+    fi
+    
+    echo "📍 Using FastMail directory: $FASTMAIL_DIR"
+    
+    # Copy the enhanced automation server as the main server
+    if [[ -f "$FASTMAIL_DIR/servers/enhanced_automation_server.py" ]]; then
+        cp "$FASTMAIL_DIR/servers/enhanced_automation_server.py" $PROJECT_DIR/automation_server.py
+        echo "✅ Copied enhanced_automation_server.py -> automation_server.py"
+    else
+        echo "❌ Enhanced automation server not found at: $FASTMAIL_DIR/servers/enhanced_automation_server.py"
+    fi
+    
+    # Copy the automation creation script
+    if [[ -f "$FASTMAIL_DIR/scripts/automated_alias_creation.py" ]]; then
+        cp "$FASTMAIL_DIR/scripts/automated_alias_creation.py" $PROJECT_DIR/
+        echo "✅ Copied automated_alias_creation.py"
+    else
+        echo "❌ Automated alias creation script not found at: $FASTMAIL_DIR/scripts/automated_alias_creation.py"
+    fi
+    
+    # Copy additional automation scripts if they exist
+    if [[ -f "$FASTMAIL_DIR/scripts/automated_alias_creation2.py" ]]; then
+        cp "$FASTMAIL_DIR/scripts/automated_alias_creation2.py" $PROJECT_DIR/
+        echo "✅ Copied automated_alias_creation2.py"
+    fi
+    
+    # Copy enhanced session client
+    if [[ -f "$FASTMAIL_DIR/clients/enhanced_session_client.py" ]]; then
+        cp "$FASTMAIL_DIR/clients/enhanced_session_client.py" $PROJECT_DIR/
+        echo "✅ Copied enhanced_session_client.py"
+    fi
+    
+    echo "✅ Enhanced automation files copied successfully!"
 else
     echo "⚠️  Not in automation directory, please copy files manually:"
-    echo "   cp automation_server.py $PROJECT_DIR/"
-    echo "   cp session_monitor.py $PROJECT_DIR/"
-    echo "   cp test_server.py $PROJECT_DIR/"
+    echo "   cp cli_x/dev/auto/services/fastmail/servers/enhanced_automation_server.py $PROJECT_DIR/automation_server.py"
+    echo "   cp cli_x/dev/auto/services/fastmail/scripts/automated_alias_creation.py $PROJECT_DIR/"
+    echo "   cp cli_x/dev/auto/services/fastmail/clients/enhanced_session_client.py $PROJECT_DIR/"
 fi
 
 # Start the automation service
@@ -113,18 +154,18 @@ if sudo systemctl is-active --quiet automation-server; then
     echo "🧪 Testing server connection..."
     sleep 5  # Give server time to fully start
     
-    if curl -s http://localhost:8888/status > /dev/null; then
-        echo "✅ Server is responding on port 8888!"
+    if curl -s http://localhost:8002/status > /dev/null; then
+        echo "✅ Server is responding on port 8002!"
         echo ""
         echo "🎉 DEPLOYMENT SUCCESSFUL!"
         echo "="*50
-        echo "🌐 Server URL: http://$(hostname -I | awk '{print $1}'):8888"
-        echo "📊 Status: curl http://localhost:8888/status"
+        echo "🌐 Server URL: http://$(hostname -I | awk '{print $1}'):8002"
+        echo "📊 Status: curl http://localhost:8002/status"
         echo "📝 Logs: sudo journalctl -u automation-server -f"
         echo "🛠️  Restart: sudo systemctl restart automation-server"
         echo ""
         echo "🎮 Test from your MacBook:"
-        echo "   python automation_client.py --server http://$(hostname -I | awk '{print $1}'):8888 status"
+        echo "   python enhanced_session_client.py --server http://$(hostname -I | awk '{print $1}'):8002 status"
         echo ""
     else
         echo "⚠️  Server started but not responding yet. Check logs:"
@@ -139,4 +180,4 @@ fi
 echo "✅ Deployment complete!"
 echo ""
 echo "📍 Project directory: $PROJECT_DIR"
-echo "🌐 Server will run on: http://0.0.0.0:8888" 
+echo "🌐 Server will run on: http://0.0.0.0:8002" 
