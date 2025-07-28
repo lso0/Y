@@ -15,6 +15,13 @@ RUN apt-get update && apt-get install -y \
     lsb-release \
     # Virtual display for headless automation
     xvfb \
+    # Build tools for Python packages (pyscard, etc.)
+    build-essential \
+    gcc \
+    pkg-config \
+    # PCSC development headers for pyscard (YubiKey support)
+    libpcsclite-dev \
+    pcscd \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Infisical CLI (optional - fallback to dummy if download fails)
