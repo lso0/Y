@@ -287,6 +287,30 @@ setup_local_environment() {
     fi
 }
 
+# Complete setup - build Docker image and check environment
+run_setup() {
+    print_info "🚀 Starting complete setup (build + environment check)..."
+    
+    # Check prerequisites
+    if ! check_docker || ! check_docker_compose; then
+        exit 1
+    fi
+    
+    # Set environment and build
+    set_environment
+    build_image
+    
+    # Run system check
+    print_info "Running system check..."
+    run_system_check
+    
+    print_info "✅ Setup complete! Your automation platform is ready."
+    print_info "Next steps:"
+    echo "  - Run './run.sh secrets-sync' to configure Infisical secrets"
+    echo "  - Run './run.sh youtube-test' to test YouTube automation"
+    echo "  - Run './run.sh shell' for interactive development"
+}
+
 # Complete setup with automatic secrets sync
 setup_complete() {
     print_info "🚀 Starting complete environment setup..."
