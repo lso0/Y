@@ -13,10 +13,10 @@ fake-useragent==1.4.0
 beautifulsoup4==4.12.2
 aiohttp==3.9.1
 
-# Server Framework
-fastapi==0.104.1
+# Server Framework - versions compatible with Infisical's pydantic 1.x requirement
+fastapi>=0.68.0,<0.100.0
 uvicorn==0.24.0
-pydantic==2.5.0
+# pydantic version will be resolved automatically to satisfy both FastAPI and Infisical
 python-multipart==0.0.6
 
 # HTTP and Utilities
