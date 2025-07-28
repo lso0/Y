@@ -209,6 +209,25 @@ setup_local_environment() {
     
     print_info "🐍 Setting up local Python environment..."
     
+    # Install system dependencies for YubiKey support
+    print_info "📦 Installing system dependencies for YubiKey support..."
+    if command -v apt-get &> /dev/null; then
+        # Ubuntu/Debian
+        sudo apt-get update -qq
+        sudo apt-get install -y libpcsclite-dev pcscd pkg-config build-essential
+        print_status "System dependencies installed (Ubuntu/Debian)"
+    elif command -v yum &> /dev/null; then
+        # RHEL/CentOS
+        sudo yum install -y pcsc-lite-devel pcsc-lite gcc pkgconfig
+        print_status "System dependencies installed (RHEL/CentOS)"
+    elif command -v brew &> /dev/null; then
+        # macOS
+        brew install pcsc-lite pkg-config
+        print_status "System dependencies installed (macOS)"
+    else
+        print_warning "Unknown package manager. You may need to install PCSC libraries manually."
+    fi
+    
     # Check if Python 3 is available
     if ! command -v python3 &> /dev/null; then
         print_error "Python 3 is not installed. Please install Python 3.8+ first."
@@ -234,11 +253,24 @@ setup_local_environment() {
     ./venv/bin/pip install cryptography python-dotenv
     
     # Try to install other dependencies but don't fail if they don't work
-    print_info "Installing additional dependencies (best effort)..."
+    print_info "Installing additional dependencies..."
     if ./venv/bin/pip install -r requirements.txt 2>/dev/null; then
         print_status "All dependencies installed successfully"
     else
-        print_warning "Some dependencies failed to install. Core functionality available."
+        print_warning "Some dependencies failed. Retrying critical YubiKey packages..."
+        
+        # Try to install YubiKey-specific packages separately
+        print_info "Installing YubiKey support packages..."
+        if ./venv/bin/pip install pyscard yubikey-manager>=5.1.0 2>/dev/null; then
+            print_status "YubiKey support packages installed successfully"
+        else
+            print_warning "YubiKey packages failed to install. You may need to install PCSC libraries manually."
+        fi
+        
+        # Install core automation packages
+        print_info "Installing core automation packages..."
+        ./venv/bin/pip install playwright selenium fastapi uvicorn requests beautifulsoup4 2>/dev/null || true
+        
         print_info "You can use: ./venv/bin/pip install <package> to install specific packages"
     fi
     
