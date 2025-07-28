@@ -136,28 +136,30 @@ import os
 from dotenv import load_dotenv
 
 print(\"📋 Environment check:\")
-print(f\"  Before load_dotenv - FM_M_0: {repr(os.getenv('FM_M_0'))}\"[:50])
-print(f\"  Before load_dotenv - FASTMAIL_USERNAME: {repr(os.getenv('FASTMAIL_USERNAME'))}\"[:50])
+print(f\"  Before load_dotenv - FM_M_0: {repr(os.getenv(\"FM_M_0\"))}\"[:50])
+print(f\"  Before load_dotenv - FASTMAIL_USERNAME: {repr(os.getenv(\"FASTMAIL_USERNAME\"))}\"[:50])
 
 load_dotenv()
 
-print(f\"  After load_dotenv - FM_M_0: {repr(os.getenv('FM_M_0'))}\"[:50])
-print(f\"  After load_dotenv - FM_P_0: {'***' if os.getenv('FM_P_0') else 'None'}\")
-print(f\"  After load_dotenv - FASTMAIL_USERNAME: {repr(os.getenv('FASTMAIL_USERNAME'))}\"[:50])
-print(f\"  After load_dotenv - FASTMAIL_PASSWORD: {'***' if os.getenv('FASTMAIL_PASSWORD') else 'None'}\")
+print(f\"  After load_dotenv - FM_M_0: {repr(os.getenv(\"FM_M_0\"))}\"[:50])
+fm_p0_status = \"***\" if os.getenv(\"FM_P_0\") else \"None\"
+print(f\"  After load_dotenv - FM_P_0: {fm_p0_status}\")
+print(f\"  After load_dotenv - FASTMAIL_USERNAME: {repr(os.getenv(\"FASTMAIL_USERNAME\"))}\"[:50])
+fm_pass_status = \"***\" if os.getenv(\"FASTMAIL_PASSWORD\") else \"None\"
+print(f\"  After load_dotenv - FASTMAIL_PASSWORD: {fm_pass_status}\")
 
 # Check if either set works
-fm_creds = os.getenv('FM_M_0') and os.getenv('FM_P_0')
-fastmail_creds = os.getenv('FASTMAIL_USERNAME') and os.getenv('FASTMAIL_PASSWORD')
+fm_creds = os.getenv(\"FM_M_0\") and os.getenv(\"FM_P_0\")
+fastmail_creds = os.getenv(\"FASTMAIL_USERNAME\") and os.getenv(\"FASTMAIL_PASSWORD\")
 
 if fm_creds or fastmail_creds:
-    print('✅ FastMail credentials available')
+    print(\"✅ FastMail credentials available\")
     if fm_creds:
-        print('  ✅ Infisical format (FM_M_0, FM_P_0) working')
+        print(\"  ✅ Infisical format (FM_M_0, FM_P_0) working\")
     if fastmail_creds:
-        print('  ✅ Standard format (FASTMAIL_*) working')
+        print(\"  ✅ Standard format (FASTMAIL_*) working\")
 else:
-    print('❌ No working FastMail credentials found')
+    print(\"❌ No working FastMail credentials found\")
 "
 '
 
