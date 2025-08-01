@@ -10,6 +10,8 @@ import sys
 import json
 import base64
 import getpass
+import shutil
+import tarfile
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -244,6 +246,223 @@ class YubiKeyTokenManager:
         """Decrypt Infisical token specifically"""
         return self.decrypt_service_token("infisical", passcode, quiet)
 
+    def encrypt_data_folder(self, data_folder_path: str, passcode: Optional[str] = None, backup_original: bool = True) -> bool:
+        """Encrypt the entire data folder using YubiKey + passphrase"""
+        data_path = Path(data_folder_path)
+        
+        if not data_path.exists():
+            print(f"❌ Data folder not found: {data_path}")
+            return False
+            
+        if not data_path.is_dir():
+            print(f"❌ Path is not a directory: {data_path}")
+            return False
+        
+        print(f"🔐 Encrypting data folder: {data_path}")
+        print("👆 Please touch your YubiKey when it blinks...")
+        
+        # Get YubiKey response
+        yubikey_response = self.get_yubikey_challenge("data_folder")
+        if not yubikey_response:
+            return False
+            
+        # Get passcode with confirmation
+        if not passcode:
+            while True:
+                passcode1 = getpass.getpass("🔒 Enter your passcode: ")
+                if not passcode1:
+                    print("❌ No passcode provided")
+                    return False
+                    
+                passcode2 = getpass.getpass("🔒 Confirm your passcode: ")
+                if passcode1 == passcode2:
+                    passcode = passcode1
+                    break
+                else:
+                    print("❌ Passphrases don't match. Please try again.")
+        
+        try:
+            # Create a temporary tar file of the data folder
+            temp_tar_path = data_path.parent / f"{data_path.name}_temp.tar.gz"
+            print(f"📦 Creating archive: {temp_tar_path}")
+            
+            with tarfile.open(temp_tar_path, 'w:gz') as tar:
+                tar.add(data_path, arcname=data_path.name)
+            
+            # Read the tar file into memory
+            with open(temp_tar_path, 'rb') as f:
+                tar_data = f.read()
+            
+            # Remove temporary tar file
+            temp_tar_path.unlink()
+            
+            # Generate salt and IV
+            salt = os.urandom(16)
+            iv = os.urandom(16)
+            
+            # Derive key
+            key = self.derive_key(yubikey_response, passcode, salt)
+            
+            # Encrypt the tar data
+            cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+            encryptor = cipher.encryptor()
+            
+            # Pad data to AES block size
+            padding_length = 16 - (len(tar_data) % 16)
+            padded_data = tar_data + bytes([padding_length] * padding_length)
+            
+            encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
+            
+            # Create encrypted structure for the data folder
+            data_encrypted = {
+                "encrypted_data": base64.b64encode(encrypted_data).decode(),
+                "salt": base64.b64encode(salt).decode(),
+                "iv": base64.b64encode(iv).decode(),
+                "created_at": datetime.now().isoformat(),
+                "description": f"Encrypted data folder: {data_path.name}",
+                "encryption_method": "YubiKey_AES256_CBC",
+                "original_path": str(data_path),
+                "folder_name": data_path.name,
+                "data_type": "folder_archive"
+            }
+            
+            # Load existing tokens and add the data folder entry
+            encrypted_tokens = self.load_encrypted_tokens()
+            encrypted_tokens["data_folder"] = data_encrypted
+            
+            # Save the updated tokens file
+            if self.save_encrypted_tokens(encrypted_tokens):
+                print(f"✅ Data folder encrypted and saved!")
+                
+                # Backup original folder if requested
+                if backup_original:
+                    backup_path = data_path.parent / f"{data_path.name}_unencrypted_backup"
+                    if backup_path.exists():
+                        shutil.rmtree(backup_path)
+                    shutil.move(str(data_path), str(backup_path))
+                    print(f"📂 Original folder backed up to: {backup_path}")
+                    print(f"⚠️  IMPORTANT: Delete backup after verifying decryption works!")
+                else:
+                    # Remove original folder
+                    shutil.rmtree(data_path)
+                    print(f"🗑️  Original folder removed: {data_path}")
+                
+                print("🔐 Data folder is now secure - YubiKey + passcode required to decrypt")
+                return True
+            else:
+                print("❌ Failed to save encrypted data")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error encrypting data folder: {e}")
+            # Clean up temp file if it exists
+            if temp_tar_path.exists():
+                temp_tar_path.unlink()
+            return False
+
+    def decrypt_data_folder(self, target_path: Optional[str] = None, passcode: Optional[str] = None, quiet: bool = False) -> bool:
+        """Decrypt and restore the data folder using YubiKey + passcode"""
+        encrypted_tokens = self.load_encrypted_tokens()
+        
+        if not encrypted_tokens or "data_folder" not in encrypted_tokens:
+            if not quiet:
+                print("❌ No encrypted data folder found")
+            return False
+        
+        encrypted_data = encrypted_tokens["data_folder"]
+        
+        if not quiet:
+            print("🔓 Decrypting data folder with YubiKey...")
+            print("👆 Please touch your YubiKey when it blinks...")
+        
+        # Get YubiKey response
+        yubikey_response = self.get_yubikey_challenge("data_folder")
+        if not yubikey_response:
+            return False
+            
+        # Get passcode
+        if not passcode:
+            passcode = getpass.getpass("🔒 Enter your passcode: ")
+        
+        # Decode components
+        try:
+            encrypted_tar_data = base64.b64decode(encrypted_data["encrypted_data"])
+            salt = base64.b64decode(encrypted_data["salt"])
+            iv = base64.b64decode(encrypted_data["iv"])
+        except Exception as e:
+            print(f"❌ Invalid encrypted data format: {e}")
+            return False
+        
+        # Derive key
+        try:
+            key = self.derive_key(yubikey_response, passcode, salt)
+        except Exception as e:
+            print(f"❌ Failed to derive key: {e}")
+            return False
+        
+        # Decrypt data
+        try:
+            cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+            decryptor = cipher.decryptor()
+            padded_data = decryptor.update(encrypted_tar_data) + decryptor.finalize()
+            
+            # Remove padding
+            padding_length = padded_data[-1]
+            tar_data = padded_data[:-padding_length]
+            
+            # Determine extraction path
+            if target_path:
+                extract_path = Path(target_path)
+            else:
+                original_path = encrypted_data.get("original_path")
+                if original_path:
+                    extract_path = Path(original_path).parent
+                else:
+                    extract_path = self.project_root / "cli_x"
+            
+            # Create temporary tar file and extract
+            temp_tar_path = extract_path / "temp_data_restore.tar.gz"
+            
+            with open(temp_tar_path, 'wb') as f:
+                f.write(tar_data)
+            
+            # Extract the tar file
+            with tarfile.open(temp_tar_path, 'r:gz') as tar:
+                tar.extractall(extract_path)
+            
+            # Remove temporary tar file
+            temp_tar_path.unlink()
+            
+            folder_name = encrypted_data.get("folder_name", "data")
+            restored_path = extract_path / folder_name
+            
+            if not quiet:
+                print(f"✅ Data folder decrypted and restored to: {restored_path}")
+            return True
+            
+        except Exception as e:
+            if not quiet:
+                print(f"❌ Decryption failed - wrong YubiKey or passcode: {e}")
+            return False
+
+    def check_data_folder_status(self) -> Dict[str, Any]:
+        """Check if data folder is encrypted and provide status info"""
+        encrypted_tokens = self.load_encrypted_tokens()
+        
+        if "data_folder" in encrypted_tokens:
+            data_info = encrypted_tokens["data_folder"]
+            return {
+                "encrypted": True,
+                "created_at": data_info.get("created_at", "Unknown"),
+                "original_path": data_info.get("original_path", "Unknown"),
+                "folder_name": data_info.get("folder_name", "data"),
+                "description": data_info.get("description", "No description")
+            }
+        else:
+            return {
+                "encrypted": False
+            }
+
 def main():
     import argparse
     
@@ -255,12 +474,38 @@ def main():
     parser.add_argument('--list', action='store_true', help='List all encrypted services')
     parser.add_argument('--passcode', help='Passcode (will prompt if not provided)')
     
+    # Data folder encryption options
+    parser.add_argument('--encrypt-data', metavar='FOLDER_PATH', help='Encrypt entire data folder using YubiKey + passphrase')
+    parser.add_argument('--decrypt-data', action='store_true', help='Decrypt and restore the data folder')
+    parser.add_argument('--decrypt-data-to', metavar='TARGET_PATH', help='Decrypt data folder to specific location')
+    parser.add_argument('--check-data-status', action='store_true', help='Check if data folder is encrypted')
+    parser.add_argument('--no-backup', action='store_true', help='Do not create backup when encrypting data folder (DANGEROUS)')
+    
     args = parser.parse_args()
     
     manager = YubiKeyTokenManager()
     
     if args.list:
         manager.list_services()
+    elif args.check_data_status:
+        status = manager.check_data_folder_status()
+        if status["encrypted"]:
+            print("🔐 Data folder is ENCRYPTED")
+            print(f"  📅 Created: {status['created_at']}")
+            print(f"  📁 Original path: {status['original_path']}")
+            print(f"  📝 Description: {status['description']}")
+        else:
+            print("🔓 Data folder is NOT encrypted")
+    elif args.encrypt_data:
+        backup_original = not args.no_backup
+        success = manager.encrypt_data_folder(args.encrypt_data, args.passcode, backup_original)
+        sys.exit(0 if success else 1)
+    elif args.decrypt_data:
+        success = manager.decrypt_data_folder(passcode=args.passcode)
+        sys.exit(0 if success else 1)
+    elif args.decrypt_data_to:
+        success = manager.decrypt_data_folder(target_path=args.decrypt_data_to, passcode=args.passcode)
+        sys.exit(0 if success else 1)
     elif args.encrypt is not None:
         # Handle interactive token input
         if args.encrypt == '':

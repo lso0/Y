@@ -11,3 +11,7 @@ ENV/ a/downloaded_files/
 
 # Sensitive RevenueCat data
 RC/db/*.json
+
+# Encrypted data folder (when encrypted, original is moved to backup)
+cli_x/data
+*_unencrypted_backup/
